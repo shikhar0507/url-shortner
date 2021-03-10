@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+<script>
+    fetch("http://localhost:8080/shorten",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:"https://www.youtube.com/watch?v=a5uQMwRMHcs"})})
+    .then(res=>{
+        if(res.ok) {
+            return res.json()
+        }
+        throw new Error(res.statusText)
+    }).then(response=>{
+        console.log(response.url)
+    }).catch(console.error)
+</script>
+</body>
+</html>
