@@ -79,6 +79,7 @@ func handleShortner(w http.ResponseWriter, r *http.Request) {
 	id,err := setId(reqURL.Url)
 
 	if err != nil {
+		fmt.Println(err)
 		if err.Error() == "failed to assign a unique value" {
 			http.Error(w,err.Error(),http.StatusInternalServerError)
 			return
@@ -86,7 +87,8 @@ func handleShortner(w http.ResponseWriter, r *http.Request) {
 		http.Error(w,"Something went wrong",http.StatusInternalServerError)
 	}
 	fmt.Println("used id",id)
-	succ := SuccesRes{Status: 200,Url: id}
+
+	succ := SuccesRes{Status: 200,Url: "http://localhost:8080/"+id}
 	sendJSONResponse(w,200,succ)
 
 }
@@ -94,7 +96,8 @@ func handleShortner(w http.ResponseWriter, r *http.Request) {
 func setId(reqURL string) (string,error) {
 	value := createId()
 	//value := "RsWxP"
-	mainErr := retry(3,1000, func() error {
+	mainErr := retry(100,1000, func() error {
+		fmt.Println("adding value",value)
 		_,err := db.Exec(context.Background(),"insert into urls values($1,$2)",value,reqURL)
 		if err == nil {
 			return nil
