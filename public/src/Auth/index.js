@@ -33,7 +33,7 @@ import {withRouter} from 'react-router-dom';
       if(!this.state.psswd) {
         return this.setState({error:'Please enter a password'})
       }
-      this.setState({isActive:true})
+      this.setState({isActive:true,error:""})
       if(this.state.authType === "login") {
         //   localStorage.setItem('cookie','true')
           this.props.handleLogin(this.props.history)
@@ -68,22 +68,22 @@ import {withRouter} from 'react-router-dom';
     render() {
       return (
       <div className="login-form">
-      <h1 className="title is-3">{this.state.authType  === "login" ? "Login" : "Signup"}</h1>
-      <div className="field">
-        <label className="label">Username</label>
-         <div className="control">
-           <input className="input is-success" type="text" placeholder="Enter username" onChange={this.setUsername} value={this.state.username}></input>
-         </div>
-      </div>
-      <div className="field">
-        <label className="label">Password</label>
-         <div className="control">
-           <input className="input" type="password" placeholder="Enter password" onChange={this.setPassword} value={this.state.psswd}></input>
-         </div>
-      </div>
-      {this.state.error ?  <div className="has-text-danger pt-2 pb-2">{this.state.error}</div> : ''}
-     
-      <button className={"button is-primary "+(this.state.isActive ? 'is-loading'  : '')} onClick={this.handleSubmit}>login</button>
+        <h1 className="title is-3">{this.state.authType  === "login" ? "Login" : "Signup"}</h1>
+        <div className="field">
+          <label className="label">Username</label>
+          <div className="control">
+            <input className="input is-success" type="text" placeholder="Enter username" onChange={this.setUsername} value={this.state.username}></input>
+          </div>
+        </div>
+        <div className="field">
+          <label className="label">Password</label>
+          <div className="control">
+            <input className="input" type="password" placeholder="Enter password" onChange={this.setPassword} value={this.state.psswd}></input>
+          </div>
+        </div>
+        {this.state.error ?  <div className="has-text-danger pt-2 pb-2">{this.state.error}</div> : ''}
+      
+        <button className={"button is-primary "+(this.state.isActive ? 'is-loading'  : '')} onClick={this.handleSubmit}>login</button>
     </div>
     )
     }
