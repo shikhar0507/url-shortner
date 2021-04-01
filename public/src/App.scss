@@ -1,0 +1,39 @@
+$primary : #E415A3;
+$footer-background-color: #e415a32e;
+@import "../node_modules/bulma/sass/base/_all.sass";
+@import "../node_modules/bulma/sass/helpers/_all.sass";
+@import "../node_modules/bulma/sass/components/navbar.sass";
+@import "../node_modules/bulma/sass/utilities/_all.sass";
+@import "../node_modules/bulma/sass/elements/title.sass";
+@import "../node_modules/bulma/sass/elements/button.sass";
+@import "../node_modules/bulma/sass/layout/footer.sass";
+@import "../node_modules/bulma/sass/form/_all.sass";
+
+// @import "../node_modules/bulma/sass/form/input-textarea.sass";
+
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda&display=swap');
+
+body {
+    font-family: 'Bodoni Moda', serif;
+}
+.app {
+    padding-top: 3.25rem;
+}
+@media (max-width:1023px) {
+    .app {
+        padding-top: 9.25rem;
+        margin-bottom: 9.25rem;
+    }
+}
+.footer {
+    position: fixed;
+    bottom: 0rem;
+    width: 100%;
+    padding-top: 1rem;
+}
+
+.login-form {
+    max-width: 480px;
+    display: block;
+    margin: 0 auto;
+}

@@ -27,7 +27,7 @@ type stop struct {
 
 func main() {
 
-	dbpool, err := pgxpool.Connect(context.Background(),"postgres://pujacapital:Dhruv.2017@localhost:5432/url_short")
+	dbpool, err := pgxpool.Connect(context.Background(),"postgres://xanadu:xanadu@localhost:5432/url_short")
 	if err != nil {
 		log.Fatal(err)
 	}
