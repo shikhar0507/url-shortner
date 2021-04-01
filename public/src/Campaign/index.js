@@ -1,6 +1,6 @@
 import React from 'react';
-import './index.scss';
 import {withRouter} from 'react-router-dom'
+
 class Campaign extends React.Component {
     constructor(props) {
         super(props) 

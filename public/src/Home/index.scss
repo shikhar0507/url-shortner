@@ -1,0 +1,18 @@
+@import "../../node_modules/bulma/sass/components/card.sass";
+@import "../../node_modules/bulma/sass/helpers/typography.sass";
+
+
+.home {
+    text-align: center;
+}
+
+.url-card {
+    max-width: 480px;
+    margin: 0 auto;
+    padding:16px 16px;
+}
+.url-card .control {
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+}

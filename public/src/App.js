@@ -3,10 +3,12 @@ import {BrowserRouter as Router,
   Switch,
   Route,
   Redirect,
+  Link
 } from 'react-router-dom';
 import Navbar from './navbar';
 import Auth from './Auth';
 import Campaign from './Campaign';
+import Home from './Home';
 import './App.scss';
 class App extends React.Component {
   constructor(props) {
@@ -46,10 +48,11 @@ class App extends React.Component {
               <Auth type="signup" key="signup"></Auth>
             </Route>
             <Route path="/campaign">
-            <Campaign></Campaign>
-              {/* {this.state.auth ? <Campaign></Campaign> : <Redirect to="/login"></Redirect> } */}
+              {this.state.auth ? <Campaign></Campaign> : <Redirect to="/login"></Redirect> }
             </Route>
-            <Route path="/">Home</Route>
+            <Route path="/">
+              <Home auth={this.state.auth}></Home>
+            </Route>
           </Switch>
         </div>
       </Router>
@@ -57,6 +60,17 @@ class App extends React.Component {
     )
   }
 } 
+
+const CampaginLink = () => {
+  return (
+    <Link to="/campaign">
+      <button className="button is-primary">
+      Create campaign
+      </button>
+    </Link>
+  )
+}
+
 const isLoggedIn = () => {
   return localStorage.getItem("cookie")
   const cookie = document.cookie;
@@ -73,5 +87,6 @@ const isLoggedIn = () => {
   return true
 }
 
-export default App;
+// export default App;
+export {App,CampaginLink}
 
