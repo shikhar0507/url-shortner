@@ -11,10 +11,11 @@ import (
 	"time"
 	"url-shortner/auth"
 
+	"strings"
+
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shikhar0507/requestJSON"
-	//"net/url"
 )
 
 var db *pgxpool.Pool
@@ -37,9 +38,9 @@ func main() {
 	defer db.Close()
 
 	// url-shortner
-
 	http.HandleFunc("/shorten", handleShortner)
-
+	//redirect
+	http.HandleFunc("/", handleRedirect)
 	//auth
 	http.HandleFunc("/signup-user", func(rw http.ResponseWriter, r *http.Request) {
 		auth.Signup(rw, r, db)
@@ -52,6 +53,20 @@ func main() {
 	})
 
 	log.Fatal(http.ListenAndServe("127.0.0.1:8080", nil))
+}
+
+func handleRedirect(w http.ResponseWriter, r *http.Request) {
+	id := strings.Split(r.URL.Path, "/")[1]
+	fmt.Println(id)
+	var queryId string
+	var originalUrl string
+	err := db.QueryRow(context.Background(), "select * from urls where id=$1", id).Scan(&queryId, &originalUrl)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, originalUrl, http.StatusPermanentRedirect)
 }
 
 func handleShortner(w http.ResponseWriter, r *http.Request) {
