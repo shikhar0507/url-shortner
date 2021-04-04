@@ -92,10 +92,10 @@ class URLShortner extends React.Component {
             this.setState({error:'Enter url'})
             return
         }
-        if(!isValidURL(this.state.url)) {
-            this.setState({error:"Doesn't look like a correct url"})
-            return
-        }
+        // if(!isValidURL(this.state.url)) {
+        //     this.setState({error:"Doesn't look like a correct url"})
+        //     return
+        // }
         this.setState({active:true,error:""})
         fetch("http://localhost:8080/shorten",{
             method:'POST',

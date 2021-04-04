@@ -57,12 +57,16 @@ func main() {
 
 func handleRedirect(w http.ResponseWriter, r *http.Request) {
 	id := strings.Split(r.URL.Path, "/")[1]
+
+	if id == "favicon.ico" {
+		return
+	}
 	fmt.Println(id)
 	var queryId string
 	var originalUrl string
 	err := db.QueryRow(context.Background(), "select * from urls where id=$1", id).Scan(&queryId, &originalUrl)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("query error", err)
 		http.Error(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
