@@ -1,25 +1,27 @@
-package  main
+package main
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/jackc/pgconn"
-	"github.com/shikhar0507/requestJSON"
 	"log"
 	rand2 "math/rand"
 	"net/http"
-	"strings"
 	"time"
+	"url-shortner/auth"
 
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/shikhar0507/requestJSON"
 	//"net/url"
 )
+
 var db *pgxpool.Pool
+
 type SuccesRes struct {
-	Status int `json:"status"`
-	Url string `json:"url"`
+	Status int    `json:"status"`
+	Url    string `json:"url"`
 }
 type stop struct {
 	error
@@ -27,136 +29,138 @@ type stop struct {
 
 func main() {
 
-	dbpool, err := pgxpool.Connect(context.Background(),"postgres://xanadu:xanadu@localhost:5432/url_short")
+	dbpool, err := pgxpool.Connect(context.Background(), "postgres://xanadu:xanadu@localhost:5432/tracker")
 	if err != nil {
 		log.Fatal(err)
 	}
 	db = dbpool
 	defer db.Close()
-	http.HandleFunc("/",handleHome)
-	http.HandleFunc("/shorten",handleShortner)
 
-	log.Fatal(http.ListenAndServe("127.0.0.1:8080",nil))
+	// url-shortner
 
-}
-func handleHome(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/" {
-		http.ServeFile(w,r,"index.html")
-		return
-	}
-	if r.URL.Path == "/favicon.ico" {
-		return
-	}
-	fmt.Println(r.URL.Path)
-	id := strings.Split(r.URL.Path,"/")[1]
-	fmt.Println(id)
-	var queryId string
-	var originalUrl string
-	err := db.QueryRow(context.Background(),"select * from urls where id=$1",id).Scan(&queryId,&originalUrl)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(w,"something went wrong",http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w,r,originalUrl,http.StatusPermanentRedirect)
+	http.HandleFunc("/shorten", handleShortner)
 
+	//auth
+	http.HandleFunc("/signup-user", func(rw http.ResponseWriter, r *http.Request) {
+		auth.Signup(rw, r, db)
+	})
+	http.HandleFunc("/login-user", func(rw http.ResponseWriter, r *http.Request) {
+		auth.Signin(rw, r, db)
+	})
+	http.HandleFunc("/logout", func(rw http.ResponseWriter, r *http.Request) {
+		auth.Logout(rw, r, db)
+	})
+
+	log.Fatal(http.ListenAndServe("127.0.0.1:8080", nil))
 }
 
 func handleShortner(w http.ResponseWriter, r *http.Request) {
+	fmt.Println(r.Header.Get("Content-Type"), r.URL.String(), r.Method)
+
+	if r.Method == "OPTIONS" {
+		w.Header().Add("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 
 	type ReqURL struct {
-		 Url string
+		Url string
 	}
 
 	var reqURL ReqURL
-	result := requestJSON.Decode(w,r,&reqURL)
+	result := requestJSON.Decode(w, r, &reqURL)
+	fmt.Println(result)
 	if result.Status != 200 {
+
 		sendJSONResponse(w, result.Status, result)
 		return
 	}
 
-
-	id,err := setId(reqURL.Url)
-
+	id, err := setId(reqURL.Url)
 	if err != nil {
 		fmt.Println(err)
 		if err.Error() == "failed to assign a unique value" {
-			http.Error(w,err.Error(),http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Error(w,"Something went wrong",http.StatusInternalServerError)
+		http.Error(w, "Something went wrong", http.StatusInternalServerError)
 	}
-	fmt.Println("used id",id)
+	fmt.Println("used id", id)
 
-	succ := SuccesRes{Status: 200,Url: "http://localhost:8080/"+id}
-	sendJSONResponse(w,200,succ)
+	succ := SuccesRes{Status: 200, Url: "http://localhost:8080/" + id}
+	w.Header().Add("Access-Control-Allow-Origin", "http://localhost:3000")
+	w.Header().Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
+	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+	sendJSONResponse(w, 200, succ)
 
 }
 
-func setId(reqURL string) (string,error) {
+func setId(reqURL string) (string, error) {
 	value := createId()
 	//value := "RsWxP"
-	mainErr := retry(100,1000, func() error {
-		fmt.Println("adding value",value)
-		_,err := db.Exec(context.Background(),"insert into urls values($1,$2)",value,reqURL)
+	mainErr := retry(100, 1000, func() error {
+		fmt.Println("adding value", value)
+		_, err := db.Exec(context.Background(), "insert into urls values($1,$2)", value, reqURL)
 		if err == nil {
 			return nil
 		}
 		var pgErr *pgconn.PgError
-		if errors.As(err,&pgErr) {
+		if errors.As(err, &pgErr) {
 			switch pgErr.Code {
-				case "23505":
-					fmt.Println("creating a new id")
-					value = createId()
-					return err
-				}
+			case "23505":
+				fmt.Println("creating a new id")
+				value = createId()
+				return err
+			}
 		}
 		return err
 	})
 
 	if mainErr != nil {
-		return "",mainErr
+		return "", mainErr
 	}
-	return value,nil
-
+	return value, nil
 
 }
 
-
-func retry(count int,sleep time.Duration, f func() error) error {
+func retry(count int, sleep time.Duration, f func() error) error {
 	err := f()
 	if err != nil {
-		if s,ok := err.(stop); ok {
+		if s, ok := err.(stop); ok {
 			return s.error
 		}
 		count--
 		if count > 0 {
 			time.Sleep(sleep)
-			return retry(count,1*sleep,f)
+			return retry(count, 1*sleep, f)
 		}
 		return err
 	}
 	return nil
 }
 
-func createId() string{
-	  letterString := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	  result := ""
+func createId() string {
+	letterString := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	result := ""
 
-	  for i := 0; i < 6;i++ {
-	  	randStr := letterString[rand2.Intn(len(letterString))]
-	  	result  = result+string(randStr)
-	  }
-	  return result
+	for i := 0; i < 6; i++ {
+		randStr := letterString[rand2.Intn(len(letterString))]
+		result = result + string(randStr)
+	}
+	return result
 }
 
-func sendJSONResponse(w http.ResponseWriter,status int, s interface{})  {
+func sendJSONResponse(w http.ResponseWriter, status int, s interface{}) {
 	w.WriteHeader(status)
-	j, err:= json.Marshal(s)
+	w.Header().Add("Content-Type", "application/json")
+	w.Header().Add("Acces-Control-Allow-Origin", "*")
+	j, err := json.Marshal(s)
 	if err != nil {
-		http.Error(w,"Something went wrong",http.StatusInternalServerError)
+		http.Error(w, "Something went wrong", http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w,string(j))
 
+	fmt.Fprintf(w, string(j))
 }

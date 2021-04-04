@@ -1,5 +1,7 @@
 $primary : #E415A3;
 $footer-background-color: #e415a32e;
+$footer-padding:1rem 1.5rem;
+
 @import "../node_modules/bulma/sass/base/_all.sass";
 @import "../node_modules/bulma/sass/helpers/_all.sass";
 @import "../node_modules/bulma/sass/components/navbar.sass";
@@ -17,7 +19,7 @@ body {
     font-family: 'Bodoni Moda', serif;
 }
 .app {
-    padding-top: 3.25rem;
+    padding-top: 1.25rem;
 }
 @media (max-width:1023px) {
     .app {

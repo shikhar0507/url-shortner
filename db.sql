@@ -21,7 +21,7 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: urls; Type: TABLE; Schema: public; Owner: pujacapital
+-- Name: urls; Type: TABLE; Schema: public; Owner: tracker
 --
 
 CREATE TABLE public.urls (
@@ -30,10 +30,38 @@ CREATE TABLE public.urls (
 );
 
 
-ALTER TABLE public.urls OWNER TO pujacapital;
+
+ALTER TABLE public.urls OWNER TO tracker;
+
 
 --
--- Data for Name: urls; Type: TABLE DATA; Schema: public; Owner: pujacapital
+-- Name: auth; Type: TABLE; Schema: public; Owner: tracker
+--
+
+CREATE TABLE public.auth (
+    username character varying(20) PRIMARY KEY,
+    hash character varying(200)
+);
+
+
+ALTER TABLE public.auth OWNER TO tracker;
+
+
+
+--
+-- Name: sessions; Type: TABLE; Schema: public; Owner: tracker
+--
+
+CREATE TABLE public.sessions (
+    username character varying(20),
+    sessionid character varying(100)
+);
+
+
+ALTER TABLE public.sessions OWNER TO tracker;
+
+--
+-- Data for Name: urls; Type: TABLE DATA; Schema: public; Owner: tracker
 --
 
 COPY public.urls (id, url) FROM stdin;
