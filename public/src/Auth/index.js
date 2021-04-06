@@ -16,9 +16,7 @@ import {withRouter} from 'react-router-dom';
         authType : this.props.type
       }
     }
-    componentDidMount() {
-    //   this.setState({authType:this.props.type})
-    }
+
     setUsername(e) {
       this.setState({username:e.target.value})
     }
@@ -34,20 +32,14 @@ import {withRouter} from 'react-router-dom';
         return this.setState({error:'Please enter a password'})
       }
       this.setState({isActive:true,error:""})
-      if(this.state.authType === "login") {
-        //   localStorage.setItem('cookie','true')
-          this.props.handleLogin(this.props.history)
-    } 
-    else {
-        this.props.history.push('/login')
-    }
-      return
-      fetch(`http://localhost:8080/${this.state.authType}`,{
+      
+      fetch(`http://localhost:8080/${this.state.authType === "login" ? 'login-user' : 'signup-user'}`,{
         method:'POST',
         body:JSON.stringify({
          username:this.state.username,
          psswd:this.state.psswd 
         }),
+        credentials: 'include',
         headers: {
           'Content-Type':'application/json'
         }
@@ -58,7 +50,14 @@ import {withRouter} from 'react-router-dom';
           this.setState({error:response.message,isActive:false})
           return
         }    
-        this.state.authType === "login" ?  this.props.onLogin(true) : this.props.onSignup(true)
+        
+        if(this.state.authType === "login") {
+          //   localStorage.setItem('cookie','true')
+            this.props.handleLogin(this.props.history)
+          } 
+          else {
+            this.props.history.push('/login')
+          }
       }).catch(error=>{
         this.setState({error:error.message,isActive:false})
       })

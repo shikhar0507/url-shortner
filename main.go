@@ -2,18 +2,18 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	rand2 "math/rand"
 	"net/http"
+	"strings"
 	"time"
 	"url-shortner/auth"
-
-	"strings"
+	"url-shortner/utils"
 
 	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shikhar0507/requestJSON"
 )
@@ -37,10 +37,15 @@ func main() {
 	db = dbpool
 	defer db.Close()
 
-	// url-shortner
-	http.HandleFunc("/shorten", handleShortner)
+	// favicon
+	http.HandleFunc("/favicon.ico", func(rw http.ResponseWriter, r *http.Request) {
+		return
+	})
+	// http.Handle("/public/build/", http.StripPrefix("/public/build/", http.FileServer(http.Dir("public/build"))))
+
 	//redirect
 	http.HandleFunc("/", handleRedirect)
+
 	//auth
 	http.HandleFunc("/signup-user", func(rw http.ResponseWriter, r *http.Request) {
 		auth.Signup(rw, r, db)
@@ -52,35 +57,52 @@ func main() {
 		auth.Logout(rw, r, db)
 	})
 
+	http.HandleFunc("/auth", func(rw http.ResponseWriter, r *http.Request) {
+		auth.CheckAuth(rw, r, db)
+	})
+
+	// url-shortner api
+	http.HandleFunc("/shorten`", handleShortner)
+
 	log.Fatal(http.ListenAndServe("127.0.0.1:8080", nil))
 }
 
 func handleRedirect(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("request for", r.URL.String())
 	id := strings.Split(r.URL.Path, "/")[1]
+	originalUrl, err := getRedirectUrl(id)
+	switch err {
+	case nil:
+		http.Redirect(w, r, originalUrl, http.StatusPermanentRedirect)
+	case pgx.ErrNoRows:
+		fmt.Println("serving", r.URL.String())
+		fs := http.FileServer(http.Dir("public/build/"))
+		fs.ServeHTTP(w, r)
+		// http.Redirect(w, r, "/public/build/", http.StatusTemporaryRedirect)
+	default:
+		fmt.Println("query error", err)
+		resp := utils.Response{Status: http.StatusInternalServerError}
+		utils.SendResponse(w, http.StatusInternalServerError, resp)
 
-	if id == "favicon.ico" {
-		return
 	}
-	fmt.Println(id)
+
+}
+
+func getRedirectUrl(id string) (string, error) {
 	var queryId string
 	var originalUrl string
 	err := db.QueryRow(context.Background(), "select * from urls where id=$1", id).Scan(&queryId, &originalUrl)
 	if err != nil {
-		fmt.Println("query error", err)
-		http.Error(w, "something went wrong", http.StatusInternalServerError)
-		return
+		return "", err
+
 	}
-	http.Redirect(w, r, originalUrl, http.StatusPermanentRedirect)
+	return originalUrl, nil
 }
 
 func handleShortner(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(r.Header.Get("Content-Type"), r.URL.String(), r.Method)
 
-	if r.Method == "OPTIONS" {
-		w.Header().Add("Access-Control-Allow-Origin", "http://localhost:3000")
-		w.Header().Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
-		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
-		w.WriteHeader(http.StatusOK)
+	optns := utils.HandleCors(w, r, http.MethodGet)
+	if optns == true {
 		return
 	}
 
@@ -93,7 +115,7 @@ func handleShortner(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(result)
 	if result.Status != 200 {
 
-		sendJSONResponse(w, result.Status, result)
+		utils.SendResponse(w, result.Status, result)
 		return
 	}
 
@@ -101,18 +123,17 @@ func handleShortner(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 		if err.Error() == "failed to assign a unique value" {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			resp := utils.Response{Status: http.StatusInternalServerError, Message: err.Error()}
+			utils.SendResponse(w, http.StatusInternalServerError, resp)
 			return
 		}
-		http.Error(w, "Something went wrong", http.StatusInternalServerError)
+		resp := utils.Response{Status: http.StatusInternalServerError}
+		utils.SendResponse(w, http.StatusInternalServerError, resp)
 	}
 	fmt.Println("used id", id)
 
 	succ := SuccesRes{Status: 200, Url: "http://localhost:8080/" + id}
-	w.Header().Add("Access-Control-Allow-Origin", "http://localhost:3000")
-	w.Header().Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
-	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
-	sendJSONResponse(w, 200, succ)
+	utils.SendResponse(w, 200, succ)
 
 }
 
@@ -169,17 +190,4 @@ func createId() string {
 		result = result + string(randStr)
 	}
 	return result
-}
-
-func sendJSONResponse(w http.ResponseWriter, status int, s interface{}) {
-	w.WriteHeader(status)
-	w.Header().Add("Content-Type", "application/json")
-	w.Header().Add("Acces-Control-Allow-Origin", "*")
-	j, err := json.Marshal(s)
-	if err != nil {
-		http.Error(w, "Something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Fprintf(w, string(j))
 }

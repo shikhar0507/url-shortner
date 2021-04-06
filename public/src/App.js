@@ -14,22 +14,36 @@ class App extends React.Component {
   constructor(props) {
     super(props)
     this.state = {
-      auth : isLoggedIn()
+      auth : false
     }
     this.handleLogout = this.handleLogout.bind(this)
     this.handleLogin = this.handleLogin.bind(this)
 
   } 
+  componentDidMount() {
+    fetch("http://localhost:8080/auth",{
+      method:'GET',
+      body:null,
+      credentials:"include",
+    }).then(res=>{
+      if(res.ok) {
+        return res.json()
+      }
+    }).then(response=>{
+      this.setState({auth:response.Authenticated})
+    }).catch(err=>{
+      console.error(err)
+    })
+  }
   handleLogout(his) {
     console.log("logout")
-    localStorage.removeItem("cookie")
     this.setState({auth:false})
     his.push('/')
-
   }
+
   handleLogin(his) {
+
     console.log('login')
-    localStorage.setItem('cookie','true')
     his.push('/')
     this.setState({auth:true})
   }
@@ -71,21 +85,6 @@ const CampaginLink = () => {
   )
 }
 
-const isLoggedIn = () => {
-  return localStorage.getItem("cookie")
-  const cookie = document.cookie;
-  const split = cookie.split(";");
-  let auth = false
-  split.forEach(item=>{
-    const pair = item.split("=")
-    const key = pair[0];
-    const value = pair[1];
-    if(key === "sessionId" && value) {
-      auth = true;
-    }
-  })
-  return true
-}
 
 // export default App;
 export {App,CampaginLink}
