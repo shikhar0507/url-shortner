@@ -16,11 +16,9 @@ class Navbar extends React.Component {
     }
     
     logout() {
-        // delete cookie
-        // localStorage.removeItem("cookie")
-        // this.setState({auth:false})
+       
         this.props.handleLogout(this.props.history)
-        // this.props.history.push('/')
+        
     }
 
     render() {

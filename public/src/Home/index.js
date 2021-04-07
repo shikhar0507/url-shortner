@@ -102,6 +102,7 @@ class URLShortner extends React.Component {
             headers:{
                 'Content-Type':'application/json'
             },
+            credentials:"include",
             body:JSON.stringify({url:this.state.url})
         }).then(res=>{
             return res.json()

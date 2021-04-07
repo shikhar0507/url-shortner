@@ -143,8 +143,12 @@ func CheckAuth(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 }
 
 func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
-	uname, uid, err := getSession(r, db)
+	optns := utils.HandleCors(w, r, http.MethodDelete)
+	if optns == true {
+		return
+	}
 
+	uname, uid, err := getSession(r, db)
 	fmt.Println("logout")
 	if err != nil {
 		fmt.Println(err)
@@ -158,8 +162,11 @@ func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		utils.SendResponse(w, http.StatusInternalServerError, resp)
 		return
 	}
-	coo, err := r.Cookie("session")
-	coo.MaxAge = -1
+	coo, err := r.Cookie("sessionId")
+	coo.Path = "/"
+	coo.Secure = true
+	coo.HttpOnly = true
+	coo.Expires = time.Now().AddDate(-1, -1, -1)
 	coo.Value = ""
 	http.SetCookie(w, coo)
 	type Logout struct {

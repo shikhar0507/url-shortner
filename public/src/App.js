@@ -37,8 +37,22 @@ class App extends React.Component {
   }
   handleLogout(his) {
     console.log("logout")
-    this.setState({auth:false})
-    his.push('/')
+    fetch("http://localhost:8080/logout",{
+      body:null,
+      headers:{
+        'Content-Type':'application/json'
+      },
+      credentials:"include",
+      method:"DELETE"
+    }).then(res=>{
+      if(res.ok) return res.json()
+    }).then(()=>{
+      this.setState({auth:false})
+      his.push('/')
+    }).catch(err=>{
+      console.error(err)
+    })
+    
   }
 
   handleLogin(his) {

@@ -62,7 +62,7 @@ func main() {
 	})
 
 	// url-shortner api
-	http.HandleFunc("/shorten`", handleShortner)
+	http.HandleFunc("/shorten", handleShortner)
 
 	log.Fatal(http.ListenAndServe("127.0.0.1:8080", nil))
 }
@@ -101,7 +101,7 @@ func getRedirectUrl(id string) (string, error) {
 
 func handleShortner(w http.ResponseWriter, r *http.Request) {
 
-	optns := utils.HandleCors(w, r, http.MethodGet)
+	optns := utils.HandleCors(w, r, http.MethodPost)
 	if optns == true {
 		return
 	}
