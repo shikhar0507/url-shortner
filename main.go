@@ -27,6 +27,15 @@ type SuccesRes struct {
 type stop struct {
 	error
 }
+type CampaignStrc struct {
+	Source   string
+	Medium   string
+	Campaign string
+	ReqURL
+}
+type ReqURL struct {
+	Url string
+}
 
 func main() {
 
@@ -61,6 +70,7 @@ func main() {
 		auth.CheckAuth(rw, r, db)
 	})
 
+	http.HandleFunc("/campaign", handleCampaign)
 	// url-shortner api
 	http.HandleFunc("/shorten", handleShortner)
 
@@ -99,15 +109,44 @@ func getRedirectUrl(id string) (string, error) {
 	return originalUrl, nil
 }
 
-func handleShortner(w http.ResponseWriter, r *http.Request) {
-
+func handleCampaign(w http.ResponseWriter, r *http.Request) {
 	optns := utils.HandleCors(w, r, http.MethodPost)
 	if optns == true {
 		return
 	}
 
-	type ReqURL struct {
-		Url string
+	var bod CampaignStrc
+	result := requestJSON.Decode(w, r, &bod)
+	if result.Status != 200 {
+		utils.SendResponse(w, result.Status, result)
+		return
+	}
+	if bod.Campaign == "" {
+		resp := utils.Response{Status: http.StatusBadRequest, Message: "Campaign name cannot be empty"}
+		utils.SendResponse(w, http.StatusBadRequest, resp)
+		return
+	}
+	_, err := setId(bod.Url)
+	if err != nil {
+		fmt.Println(err)
+		if err.Error() == "failed to assign a unique value" {
+			resp := utils.Response{Status: http.StatusInternalServerError, Message: err.Error()}
+			utils.SendResponse(w, http.StatusInternalServerError, resp)
+			return
+		}
+		resp := utils.Response{Status: http.StatusInternalServerError}
+		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		return
+	}
+	resp := utils.Response{Status: http.StatusOK, Message: "campaign created"}
+	utils.SendResponse(w, http.StatusOK, resp)
+}
+
+func handleShortner(w http.ResponseWriter, r *http.Request) {
+
+	optns := utils.HandleCors(w, r, http.MethodPost)
+	if optns == true {
+		return
 	}
 
 	var reqURL ReqURL
@@ -141,7 +180,7 @@ func setId(reqURL string) (string, error) {
 	value := createId()
 	//value := "RsWxP"
 	mainErr := retry(100, 1000, func() error {
-		fmt.Println("adding value", value)
+
 		_, err := db.Exec(context.Background(), "insert into urls values($1,$2)", value, reqURL)
 		if err == nil {
 			return nil

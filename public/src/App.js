@@ -70,10 +70,10 @@ class App extends React.Component {
         <div className="app">
           <Switch>
             <Route path="/login">
-              <Auth type="login" key="login" handleLogin={this.handleLogin}></Auth>
+              {this.state.auth ? <Home></Home> : <Auth type="login" key="login" handleLogin={this.handleLogin}></Auth>}
             </Route>
             <Route path="/signup">
-              <Auth type="signup" key="signup"></Auth>
+            {this.state.auth ? <Home></Home> : <Auth type="signup" key="signup" handleLogin={this.handleLogin}></Auth>}
             </Route>
             <Route path="/campaign">
               {this.state.auth ? <Campaign></Campaign> : <Redirect to="/login"></Redirect> }
