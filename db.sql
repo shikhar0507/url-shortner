@@ -26,8 +26,11 @@ SET default_table_access_method = heap;
 
 CREATE TABLE public.urls (
     id character varying(6) UNIQUE PRIMARY KEY,
-    url character varying(2083)
+    url character varying(2083),
+    username character varying(20)
 );
+
+
 
 
 

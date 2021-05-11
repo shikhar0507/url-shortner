@@ -127,7 +127,7 @@ func CheckAuth(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		return
 	}
 	fmt.Println(r.Method)
-	_, uid, err := getSession(r, db)
+	_, uid, err := GetSession(r, db)
 	switch err {
 	case nil:
 		fmt.Println("found user", uid)
@@ -148,7 +148,7 @@ func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		return
 	}
 
-	uname, uid, err := getSession(r, db)
+	uname, uid, err := GetSession(r, db)
 	fmt.Println("logout")
 	if err != nil {
 		fmt.Println(err)
@@ -232,7 +232,7 @@ func generatePsswdHash(psswd string) ([]byte, error) {
 
 }
 
-func getSession(r *http.Request, db *pgxpool.Pool) (string, string, error) {
+func GetSession(r *http.Request, db *pgxpool.Pool) (string, string, error) {
 	sessionId := getSessionCookie(r)
 	fmt.Println("sid", sessionId)
 	var sessionResult string

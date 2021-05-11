@@ -12,6 +12,7 @@ import (
 	"url-shortner/auth"
 	"url-shortner/utils"
 
+	"github.com/avct/uasurfer"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -73,7 +74,6 @@ func main() {
 	http.HandleFunc("/campaign", handleCampaign)
 	// url-shortner api
 	http.HandleFunc("/shorten", handleShortner)
-
 	log.Fatal(http.ListenAndServe("127.0.0.1:8080", nil))
 }
 
@@ -101,7 +101,7 @@ func handleRedirect(w http.ResponseWriter, r *http.Request) {
 func getRedirectUrl(id string) (string, error) {
 	var queryId string
 	var originalUrl string
-	err := db.QueryRow(context.Background(), "select * from urls where id=$1", id).Scan(&queryId, &originalUrl)
+	err := db.QueryRow(context.Background(), "select id from urls where id=$1", id).Scan(&queryId, &originalUrl)
 	if err != nil {
 		return "", err
 
@@ -126,7 +126,8 @@ func handleCampaign(w http.ResponseWriter, r *http.Request) {
 		utils.SendResponse(w, http.StatusBadRequest, resp)
 		return
 	}
-	_, err := setId(bod.Url)
+	_, err := setId(r)
+
 	if err != nil {
 		fmt.Println(err)
 		if err.Error() == "failed to assign a unique value" {
@@ -158,7 +159,7 @@ func handleShortner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := setId(reqURL.Url)
+	id, err := setId(r)
 	if err != nil {
 		fmt.Println(err)
 		if err.Error() == "failed to assign a unique value" {
@@ -176,12 +177,22 @@ func handleShortner(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func setId(reqURL string) (string, error) {
+func parseQuery(r *http.Request) CampaignStrc {
+	query := r.URL.Query()
+	campignParams := CampaignStrc{Campaign: query.Get("campaign"), Source: query.Get("source"), Medium: query.Get("medium")}
+	return campignParams
+
+}
+
+func setId(r *http.Request) (string, error) {
 	value := createId()
 	//value := "RsWxP"
 	mainErr := retry(100, 1000, func() error {
+		parsedQuery := parseQuery(r)
+		ua := uasurfer.Parse(r.UserAgent())
+		username, _, err := auth.GetSession(r, db)
+		_, err = db.Exec(context.Background(), "insert into urls values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", value, r.URL.String(), parsedQuery.Campaign, parsedQuery.Source, parsedQuery.Medium, ua.Browser.Name, ua.Browser.Version, ua.OS.Platform, ua.OS.Name, ua.OS.Version, ua.DeviceType.String(), username)
 
-		_, err := db.Exec(context.Background(), "insert into urls values($1,$2)", value, reqURL)
 		if err == nil {
 			return nil
 		}
