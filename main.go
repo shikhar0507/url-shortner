@@ -59,7 +59,6 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w,r,originalUrl,http.StatusPermanentRedirect)
-
 }
 
 func handleShortner(w http.ResponseWriter, r *http.Request) {
