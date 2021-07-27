@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Response struct {
@@ -11,10 +12,15 @@ type Response struct {
 	Message string `json:"message"`
 }
 
-func HandleCors(w http.ResponseWriter, r *http.Request, method string) bool {
+type SuccesRes struct {
+	Status int    `json:"status"`
+	Url    string `json:"url"`
+}
+
+func HandleCors(w http.ResponseWriter, r *http.Request, methods []string) bool {
 	if r.Method == "OPTIONS" {
 		w.Header().Add("Access-Control-Allow-Origin", "http://localhost:3000")
-		w.Header().Add("Access-Control-Allow-Methods", method)
+		w.Header().Add("Access-Control-Allow-Methods", strings.Join(methods, ","))
 		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
 		w.Header().Add("Access-Control-Allow-Credentials", "true")
 		w.WriteHeader(http.StatusOK)

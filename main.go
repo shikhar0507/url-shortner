@@ -5,40 +5,62 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	rand2 "math/rand"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+	"url-shortner/api"
 	"url-shortner/auth"
 	"url-shortner/utils"
 
+	"github.com/avct/uasurfer"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/shikhar0507/requestJSON"
 )
 
 var db *pgxpool.Pool
 
-type SuccesRes struct {
-	Status int    `json:"status"`
-	Url    string `json:"url"`
+type Router struct {
+	api Api
 }
-type stop struct {
-	error
+
+type Api struct {
+	Links link
 }
-type CampaignStrc struct {
-	Source   string
-	Medium   string
-	Campaign string
-	ReqURL
+
+type link struct {
 }
-type ReqURL struct {
-	Url string
+
+func getSegments(r *http.Request) (string, string) {
+	split := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	head := split[0]
+	rest := "/" + strings.Join(split[1:], "/")
+	return head, rest
+}
+
+func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var head string
+	head, r.URL.Path = getSegments(r)
+	switch head {
+	case "":
+		handleRedirect(w, r)
+	case "api":
+		Api.ServeHTTP(w http.ResponseWriter, r *http.Request)
+		router.api.ServeHTTP(w, r)
+	case "stat":
+		fmt.Println("stat")
+	}
+}
+
+func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("read api")
 }
 
 func main() {
 
+	fmt.Println("starting server")
 	dbpool, err := pgxpool.Connect(context.Background(), "postgres://xanadu:xanadu@localhost:5432/tracker")
 	if err != nil {
 		log.Fatal(err)
@@ -52,7 +74,6 @@ func main() {
 
 		return
 	})
-	// http.Handle("/public/build/", http.StripPrefix("/public/build/", http.FileServer(http.Dir("public/build"))))
 
 	//redirect
 	http.HandleFunc("/", handleRedirect)
@@ -72,24 +93,40 @@ func main() {
 		auth.CheckAuth(rw, r, db)
 	})
 
-	http.HandleFunc("/campaign", handleCampaign)
+	//http.HandleFunc("/campaign", handleCampaign)
 	// url-shortner api
-	http.HandleFunc("/shorten", handleShortner)
-	log.Fatal(http.ListenAndServe("127.0.0.1:8080", nil))
+	http.HandleFunc("/shorten", func(rw http.ResponseWriter, r *http.Request) {
+		//handleShortner
+	})
+
+	http.HandleFunc("/api/v1/campaigns", func(rw http.ResponseWriter, r *http.Request) {
+		api.HandleCampaigns(rw, r, db)
+	})
+	http.HandleFunc("/api/v1/links", func(rw http.ResponseWriter, r *http.Request) {
+		fmt.Println("calling links")
+		api.HandleLinks(rw, r, db)
+	})
+	router := Router{}
+	err = http.ListenAndServe(":8080", router)
+	log.Fatal(err)
 }
 
 func handleRedirect(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("request for", r.URL.String())
 	id := strings.Split(r.URL.Path, "/")[1]
-	originalUrl, err := getRedirectUrl(id)
+	result, err := getRedirectUrl(id)
+	fmt.Println(err)
 	switch err {
 	case nil:
-		http.Redirect(w, r, originalUrl, http.StatusPermanentRedirect)
+		fmt.Println("redirecting to", result.url)
+		http.Redirect(w, r, result.url, http.StatusPermanentRedirect)
+		go updateLogs(r, result)
+		break
 	case pgx.ErrNoRows:
 		fmt.Println("serving", r.URL.String())
 		fs := http.FileServer(http.Dir("public/build/"))
 		fs.ServeHTTP(w, r)
-		// http.Redirect(w, r, "/public/build/", http.StatusTemporaryRedirect)
+		break
 	default:
 		fmt.Println("query error", err)
 		resp := utils.Response{Status: http.StatusInternalServerError}
@@ -99,143 +136,48 @@ func handleRedirect(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getRedirectUrl(id string) (string, error) {
-	var queryId string
-	var originalUrl string
-	err := db.QueryRow(context.Background(), "select id from urls where id=$1", id).Scan(&queryId, &originalUrl)
+func updateLogs(r *http.Request, result storedUrl) {
+
+	browser_info := uasurfer.Parse(r.UserAgent())
+	u, err := url.Parse(result.url)
 	if err != nil {
-		return "", err
-
-	}
-	return originalUrl, nil
-}
-
-func handleCampaign(w http.ResponseWriter, r *http.Request) {
-	optns := utils.HandleCors(w, r, http.MethodPost)
-	if optns == true {
+		fmt.Println("unable to parse short url long url")
 		return
 	}
+	query := u.Query()
+	campaign, medium, source := query.Get("camapgin"), query.Get("meidum"), query.Get("source")
 
-	var bod CampaignStrc
-	result := requestJSON.Decode(w, r, &bod)
-	if result.Status != 200 {
-		utils.SendResponse(w, result.Status, result)
-		return
+	parsedIP, referer := net.ParseIP(r.Header.Get("ip")), r.Header.Get("referer")
+	var ip string
+	if parsedIP == nil {
+		ip = "0.0.0.0"
+	} else {
+		ip = parsedIP.String()
 	}
-	if bod.Campaign == "" {
-		resp := utils.Response{Status: http.StatusBadRequest, Message: "Campaign name cannot be empty"}
-		utils.SendResponse(w, http.StatusBadRequest, resp)
-		return
-	}
-
-	_, err := setId(r, bod.ReqURL.Url)
+	fmt.Println(browser_info.OS.Platform)
+	_, err = db.Exec(context.Background(), "insert into logs(url,username,os,browser,device_type,created_on,ip,referer,campaign,medium,source,id)values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", result.url, result.username, browser_info.OS.Name.String(), browser_info.Browser.Name.String(), browser_info.DeviceType.String(), time.Now(), ip, referer, campaign, medium, source, result.id)
 	if err != nil {
 		fmt.Println(err)
-		if err.Error() == "failed to assign a unique value" {
-			resp := utils.Response{Status: http.StatusInternalServerError, Message: err.Error()}
-			utils.SendResponse(w, http.StatusInternalServerError, resp)
-			return
-		}
-		resp := utils.Response{Status: http.StatusInternalServerError}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		var pgError *pgconn.PgError
+		errors.As(err, &pgError)
+		fmt.Printf("%s at %d col %s %s %s", pgError.Message, pgError.Line, pgError.ColumnName, pgError.Detail, pgError.Hint)
 		return
 	}
-	resp := utils.Response{Status: http.StatusOK, Message: "campaign created"}
-	utils.SendResponse(w, http.StatusOK, resp)
+	fmt.Println("written to logs")
 }
 
-func handleShortner(w http.ResponseWriter, r *http.Request) {
+type storedUrl struct {
+	id       string
+	url      string
+	username string
+}
 
-	optns := utils.HandleCors(w, r, http.MethodPost)
-	if optns == true {
-		return
-	}
-
-	var reqURL ReqURL
-	result := requestJSON.Decode(w, r, &reqURL)
-
-	if result.Status != 200 {
-
-		utils.SendResponse(w, result.Status, result)
-		return
-	}
-
-	id, err := setId(r, reqURL.Url)
+func getRedirectUrl(path string) (storedUrl, error) {
+	var su storedUrl
+	err := db.QueryRow(context.Background(), "select * from urls where id=$1", path).Scan(&su.id, &su.url, &su.username)
 	if err != nil {
-		fmt.Println(err)
-		if err.Error() == "failed to assign a unique value" {
-			resp := utils.Response{Status: http.StatusInternalServerError, Message: err.Error()}
-			utils.SendResponse(w, http.StatusInternalServerError, resp)
-			return
-		}
-		resp := utils.Response{Status: http.StatusInternalServerError}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		return su, err
+
 	}
-	fmt.Println("used id", id)
-
-	succ := SuccesRes{Status: 200, Url: "http://localhost:8080/" + id}
-	utils.SendResponse(w, 200, succ)
-
-}
-
-func parseQuery(r *http.Request) CampaignStrc {
-	query := r.URL.Query()
-	campignParams := CampaignStrc{Campaign: query.Get("campaign"), Source: query.Get("source"), Medium: query.Get("medium")}
-	return campignParams
-
-}
-
-func setId(r *http.Request, largeUrl string) (string, error) {
-	value := createId()
-	mainErr := retry(100, 1000, func() error {
-
-		username, _, err := auth.GetSession(r, db)
-		_, err = db.Exec(context.Background(), "insert into urls values($1,$2,$3)", value, largeUrl, username)
-		if err == nil {
-			return nil
-		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23505":
-				fmt.Println("creating a new id")
-				value = createId()
-				return err
-			}
-		}
-		return err
-	})
-
-	if mainErr != nil {
-		return "", mainErr
-	}
-	return value, nil
-
-}
-
-func retry(count int, sleep time.Duration, f func() error) error {
-	err := f()
-	if err != nil {
-		if s, ok := err.(stop); ok {
-			return s.error
-		}
-		count--
-		if count > 0 {
-			time.Sleep(sleep)
-			return retry(count, 1*sleep, f)
-		}
-		return err
-	}
-	return nil
-}
-
-func createId() string {
-	letterString := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	result := ""
-
-	for i := 0; i < 6; i++ {
-		randStr := letterString[rand2.Intn(len(letterString))]
-		result = result + string(randStr)
-	}
-	return result
+	return su, nil
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
 	"url-shortner/utils"
 
 	"github.com/jackc/pgx/v4"
@@ -24,7 +25,7 @@ type loggedIn struct {
 }
 
 func Signup(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
-	optns := utils.HandleCors(w, r, http.MethodPost)
+	optns := utils.HandleCors(w, r, []string{"http.MethodPost"})
 	if optns == true {
 		return
 	}
@@ -72,7 +73,7 @@ func Signup(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 
 }
 func Signin(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
-	optns := utils.HandleCors(w, r, http.MethodPost)
+	optns := utils.HandleCors(w, r, []string{"http.MethodPost"})
 	if optns == true {
 		return
 	}
@@ -122,7 +123,7 @@ func Signin(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 }
 
 func CheckAuth(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
-	optns := utils.HandleCors(w, r, http.MethodGet)
+	optns := utils.HandleCors(w, r, []string{"http.MethodGet"})
 	if optns == true {
 		return
 	}
@@ -143,7 +144,7 @@ func CheckAuth(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 }
 
 func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
-	optns := utils.HandleCors(w, r, http.MethodDelete)
+	optns := utils.HandleCors(w, r, []string{" http.MethodDelete"})
 	if optns == true {
 		return
 	}
@@ -232,6 +233,9 @@ func generatePsswdHash(psswd string) ([]byte, error) {
 
 }
 
+/**
+  Returns username,sessionId and error
+*/
 func GetSession(r *http.Request, db *pgxpool.Pool) (string, string, error) {
 	sessionId := getSessionCookie(r)
 	fmt.Println("sid", sessionId)
