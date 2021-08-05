@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
-	"url-shortner/api"
 	"url-shortner/auth"
 	"url-shortner/utils"
 
@@ -18,44 +18,147 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/shikhar0507/requestJSON"
 )
 
 var db *pgxpool.Pool
 
-type Router struct {
-	api Api
-}
-
 type Api struct {
-	Links link
+	Links     Links
+	Campaigns Campaigns
 }
 
-type link struct {
+type Links struct {
 }
 
-func getSegments(r *http.Request) (string, string) {
+type LinkAdd struct {
+	LongUrl string `json: longUrl`
+}
+
+type Campaigns struct {
+}
+type stop struct {
+	error
+}
+
+func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var head string
+	head, r.URL.Path = getSegment(r)
+	fmt.Println("api head", head)
+	switch head {
+	case "login-user":
+		auth.Signin(w, r, db)
+	case "signup-user":
+		auth.Signup(w, r, db)
+	case "auth":
+		auth.CheckAuth(w, r, db)
+	case "logout":
+		auth.Logout(w, r, db)
+	case "favicon.ico":
+		return
+	case "links":
+		fmt.Println("got links")
+		api.Links.ServeHTTP(w, r)
+	case "campaigns":
+		api.Campaigns.ServeHTTP(w, r)
+	default:
+		handleRedirect(w, r, head)
+
+	}
+}
+
+func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	var head string
+	head, r.URL.Path = getSegment(r)
+	if len(head) != 0 {
+		switch r.Method {
+		case http.MethodOptions:
+			utils.HandleCors(w, r, []string{http.MethodDelete, http.MethodPut, http.MethodGet})
+		case http.MethodDelete:
+			link.Delete(w, r, head)
+		case http.MethodPut:
+			link.Update(w, r, head)
+		case http.MethodGet:
+			link.Get(w, r, head)
+		default:
+			utils.SendResponse(w, http.StatusMethodNotAllowed, "Wrong method")
+		}
+
+		return
+	}
+
+	switch r.Method {
+	case http.MethodOptions:
+		utils.HandleCors(w, r, []string{http.MethodGet, http.MethodPost})
+	case http.MethodPost:
+		link.Add(w, r)
+	case http.MethodGet:
+		link.GetAll(w, r)
+	default:
+		fmt.Fprintf(w, "Option not supported")
+	}
+}
+
+/**
+  Add a new shortened url
+ **/
+func (link Links) Add(w http.ResponseWriter, r *http.Request) {
+	session, err := auth.GetSession(r, db)
+
+	var reqBody LinkAdd
+	result := requestJSON.Decode(w, r, &reqBody)
+	if result.Status != 200 {
+		fmt.Println(result.Message)
+		utils.SendResponse(w, http.StatusInternalServerError, result.Message)
+		return
+	}
+	fmt.Println("error", err)
+	if err == nil || err == pgx.ErrNoRows {
+		shortId, insErr := setId(r, reqBody.LongUrl, session)
+		if insErr != nil {
+			fmt.Println(insErr)
+			utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
+			return
+		}
+
+		utils.SendResponse(w, http.StatusOK, &LinkAdd{LongUrl: "http://localhost:8080/" + shortId})
+		return
+	}
+	utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
+}
+
+/**
+GetAll gets the summary logs of every shortened url that user has created
+**/
+func (link Links) GetAll(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Fprintf(w, fmt.Sprintf("getAll url"))
+}
+
+// Get the summary detail of  short url for a given id
+func (link Links) Get(w http.ResponseWriter, r *http.Request, id string) {
+
+}
+
+// Delete the short url for a given id
+func (link Links) Delete(w http.ResponseWriter, r *http.Request, id string) {
+
+}
+
+// Update the short url for a given id
+func (link Links) Update(w http.ResponseWriter, r *http.Request, id string) {
+
+}
+
+func (campaign Campaigns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+}
+
+func getSegment(r *http.Request) (string, string) {
 	split := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	head := split[0]
 	rest := "/" + strings.Join(split[1:], "/")
 	return head, rest
-}
-
-func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var head string
-	head, r.URL.Path = getSegments(r)
-	switch head {
-	case "":
-		handleRedirect(w, r)
-	case "api":
-		Api.ServeHTTP(w http.ResponseWriter, r *http.Request)
-		router.api.ServeHTTP(w, r)
-	case "stat":
-		fmt.Println("stat")
-	}
-}
-
-func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("read api")
 }
 
 func main() {
@@ -66,56 +169,14 @@ func main() {
 		log.Fatal(err)
 	}
 	db = dbpool
-
 	defer db.Close()
-
-	// favicon
-	http.HandleFunc("/favicon.ico", func(rw http.ResponseWriter, r *http.Request) {
-
-		return
-	})
-
-	//redirect
-	http.HandleFunc("/", handleRedirect)
-
-	//auth
-	http.HandleFunc("/signup-user", func(rw http.ResponseWriter, r *http.Request) {
-		auth.Signup(rw, r, db)
-	})
-	http.HandleFunc("/login-user", func(rw http.ResponseWriter, r *http.Request) {
-		auth.Signin(rw, r, db)
-	})
-	http.HandleFunc("/logout", func(rw http.ResponseWriter, r *http.Request) {
-		auth.Logout(rw, r, db)
-	})
-
-	http.HandleFunc("/auth", func(rw http.ResponseWriter, r *http.Request) {
-		auth.CheckAuth(rw, r, db)
-	})
-
-	//http.HandleFunc("/campaign", handleCampaign)
-	// url-shortner api
-	http.HandleFunc("/shorten", func(rw http.ResponseWriter, r *http.Request) {
-		//handleShortner
-	})
-
-	http.HandleFunc("/api/v1/campaigns", func(rw http.ResponseWriter, r *http.Request) {
-		api.HandleCampaigns(rw, r, db)
-	})
-	http.HandleFunc("/api/v1/links", func(rw http.ResponseWriter, r *http.Request) {
-		fmt.Println("calling links")
-		api.HandleLinks(rw, r, db)
-	})
-	router := Router{}
-	err = http.ListenAndServe(":8080", router)
+	api := Api{}
+	err = http.ListenAndServe(":8080", api)
 	log.Fatal(err)
 }
 
-func handleRedirect(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("request for", r.URL.String())
-	id := strings.Split(r.URL.Path, "/")[1]
+func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 	result, err := getRedirectUrl(id)
-	fmt.Println(err)
 	switch err {
 	case nil:
 		fmt.Println("redirecting to", result.url)
@@ -131,9 +192,7 @@ func handleRedirect(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("query error", err)
 		resp := utils.Response{Status: http.StatusInternalServerError}
 		utils.SendResponse(w, http.StatusInternalServerError, resp)
-
 	}
-
 }
 
 func updateLogs(r *http.Request, result storedUrl) {
@@ -180,4 +239,58 @@ func getRedirectUrl(path string) (storedUrl, error) {
 
 	}
 	return su, nil
+}
+
+func setId(r *http.Request, largeUrl string, session auth.Session) (string, error) {
+	value := createId()
+	mainErr := retry(100, 1000, func() error {
+
+		_, err := db.Exec(context.Background(), "insert into urls values($1,$2,$3)", value, largeUrl, session.Username)
+		if err == nil {
+			return nil
+
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23505":
+				fmt.Println("creating a new id")
+				value = createId()
+				return err
+			}
+		}
+		return err
+	})
+
+	if mainErr != nil {
+		return "", mainErr
+	}
+	return value, nil
+
+}
+
+func retry(count int, sleep time.Duration, f func() error) error {
+	err := f()
+	if err != nil {
+		if s, ok := err.(stop); ok {
+			return s.error
+		}
+		count--
+		if count > 0 {
+			time.Sleep(sleep)
+			return retry(count, 1*sleep, f)
+		}
+		return err
+	}
+	return nil
+}
+
+func createId() string {
+	letterString := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	result := ""
+	for i := 0; i < 6; i++ {
+		randStr := letterString[rand.Intn(len(letterString))]
+		result = result + string(randStr)
+	}
+	return result
 }

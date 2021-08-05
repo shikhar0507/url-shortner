@@ -2,16 +2,12 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"strings"
-	"time"
 	"url-shortner/auth"
 	"url-shortner/utils"
 
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shikhar0507/requestJSON"
@@ -23,9 +19,6 @@ func init() {
 
 type ReqURL struct {
 	Url string `json: url`
-}
-type stop struct {
-	error
 }
 
 func getResourceId(path string, sep string) string {
@@ -153,41 +146,6 @@ select t.id,t.username,t.browser,t.os,t.device_type,t.total_clicks from t where 
 	utils.SendResponse(w, http.StatusOK, links)
 }
 
-/*
-func handleCampaign(w http.ResponseWriter, r *http.Request) {
-	optns := utils.HandleCors(w, r, http.MethodPost)
-	if optns == true {
-		return
-	}
-
-
-	result := requestJSON.Decode(w, r, &bod)
-	if result.Status != 200 {
-		utils.SendResponse(w, result.Status, result)
-		return
-	}
-	if bod.Campaign == "" {
-		resp := utils.Response{Status: http.StatusBadRequest, Message: "Campaign name cannot be empty"}
-		utils.SendResponse(w, http.StatusBadRequest, resp)
-		return
-	}
-
-	_, err := setId(r, bod.ReqURL.Url)
-	if err != nil {
-		fmt.Println(err)
-		if err.Error() == "failed to assign a unique value" {
-			resp := utils.Response{Status: http.StatusInternalServerError, Message: err.Error()}
-			utils.SendResponse(w, http.StatusInternalServerError, resp)
-			return
-		}
-		resp := utils.Response{Status: http.StatusInternalServerError}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
-		return
-	}
-	resp := utils.Response{Status: http.StatusOK, Message: "campaign created"}
-	utils.SendResponse(w, http.StatusOK, resp)
-}
-*/
 func handleShortner(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 
 	optns := utils.HandleCors(w, r, []string{"http.MethodPost"})
@@ -221,60 +179,4 @@ func handleShortner(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 	succ := utils.SuccesRes{Status: 200, Url: "http://localhost:8080/" + id}
 	utils.SendResponse(w, 200, succ)
 
-}
-
-func setId(r *http.Request, largeUrl string, db *pgxpool.Pool) (string, error) {
-	value := createId()
-	mainErr := retry(100, 1000, func() error {
-
-		username, _, err := auth.GetSession(r, db)
-		_, err = db.Exec(context.Background(), "insert into urls values($1,$2,$3)", value, largeUrl, username)
-		if err == nil {
-			return nil
-
-		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23505":
-				fmt.Println("creating a new id")
-				value = createId()
-				return err
-			}
-		}
-		return err
-	})
-
-	if mainErr != nil {
-		return "", mainErr
-	}
-	return value, nil
-
-}
-
-func retry(count int, sleep time.Duration, f func() error) error {
-	err := f()
-	if err != nil {
-		if s, ok := err.(stop); ok {
-			return s.error
-		}
-		count--
-		if count > 0 {
-			time.Sleep(sleep)
-			return retry(count, 1*sleep, f)
-		}
-		return err
-	}
-	return nil
-}
-
-func createId() string {
-	letterString := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	result := ""
-
-	for i := 0; i < 6; i++ {
-		randStr := letterString[rand.Intn(len(letterString))]
-		result = result + string(randStr)
-	}
-	return result
 }

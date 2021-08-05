@@ -23,6 +23,10 @@ type AuthBody struct {
 type loggedIn struct {
 	Authenticated bool
 }
+type Session struct {
+	Username  string
+	SessionId string
+}
 
 func Signup(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 	optns := utils.HandleCors(w, r, []string{"http.MethodPost"})
@@ -128,10 +132,10 @@ func CheckAuth(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		return
 	}
 	fmt.Println(r.Method)
-	_, uid, err := GetSession(r, db)
+	session, err := GetSession(r, db)
 	switch err {
 	case nil:
-		fmt.Println("found user", uid)
+		fmt.Println("found user", session.SessionId)
 		resp := loggedIn{Authenticated: true}
 		utils.SendResponse(w, http.StatusOK, resp)
 	case pgx.ErrNoRows:
@@ -149,7 +153,7 @@ func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		return
 	}
 
-	uname, uid, err := GetSession(r, db)
+	session, err := GetSession(r, db)
 	fmt.Println("logout")
 	if err != nil {
 		fmt.Println(err)
@@ -157,7 +161,7 @@ func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		utils.SendResponse(w, http.StatusInternalServerError, resp)
 		return
 	}
-	_, err = db.Exec(context.Background(), "delete from sessions where username=$1 AND sessionid=$2", uname, uid)
+	_, err = db.Exec(context.Background(), "delete from sessions where username=$1 AND sessionid=$2", session.Username, session.SessionId)
 	if err != nil {
 		resp := utils.Response{Status: http.StatusInternalServerError, Message: "Error logging out"}
 		utils.SendResponse(w, http.StatusInternalServerError, resp)
@@ -236,16 +240,17 @@ func generatePsswdHash(psswd string) ([]byte, error) {
 /**
   Returns username,sessionId and error
 */
-func GetSession(r *http.Request, db *pgxpool.Pool) (string, string, error) {
+func GetSession(r *http.Request, db *pgxpool.Pool) (Session, error) {
 	sessionId := getSessionCookie(r)
-	fmt.Println("sid", sessionId)
-	var sessionResult string
-	var sessionUsername string
-	err := db.QueryRow(context.Background(), "select * from sessions where sessionid=$1", sessionId).Scan(&sessionUsername, &sessionResult)
+	//	var sessionResult string
+	//var sessionUsername string
+	session := Session{}
+	err := db.QueryRow(context.Background(), "select * from sessions where sessionid=$1", sessionId).Scan(session.SessionId, session.Username)
 	if err != nil {
-		return "", "", err
+		return session, err
 	}
-	return sessionUsername, sessionResult, nil
+	return session, nil
+
 }
 
 func getSessionCookie(r *http.Request) string {
