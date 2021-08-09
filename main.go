@@ -42,6 +42,7 @@ type stop struct {
 }
 
 func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
 	var head string
 	head, r.URL.Path = getSegment(r)
 	fmt.Println("api head", head)
@@ -179,17 +180,20 @@ func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 	result, err := getRedirectUrl(id)
 	switch err {
 	case nil:
-		fmt.Println("redirecting to", result.url)
 		http.Redirect(w, r, result.url, http.StatusPermanentRedirect)
-		go updateLogs(r, result)
+		sessionR, serr := auth.GetSession(r, db)
+		if serr != nil || sessionR.SessionId == "" {
+			break
+		}
+		if sessionR.SessionId != "" {
+			updateLogs(r, result)
+		}
 		break
 	case pgx.ErrNoRows:
-		fmt.Println("serving", r.URL.String())
 		fs := http.FileServer(http.Dir("public/build/"))
 		fs.ServeHTTP(w, r)
 		break
 	default:
-		fmt.Println("query error", err)
 		resp := utils.Response{Status: http.StatusInternalServerError}
 		utils.SendResponse(w, http.StatusInternalServerError, resp)
 	}
@@ -206,15 +210,15 @@ func updateLogs(r *http.Request, result storedUrl) {
 	query := u.Query()
 	campaign, medium, source := query.Get("camapgin"), query.Get("meidum"), query.Get("source")
 
-	parsedIP, referer := net.ParseIP(r.Header.Get("ip")), r.Header.Get("referer")
+	parsedIP := net.ParseIP(r.Header.Get("ip"))
 	var ip string
 	if parsedIP == nil {
 		ip = "0.0.0.0"
 	} else {
 		ip = parsedIP.String()
 	}
-	fmt.Println(browser_info.OS.Platform)
-	_, err = db.Exec(context.Background(), "insert into logs(url,username,os,browser,device_type,created_on,ip,referer,campaign,medium,source,id)values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", result.url, result.username, browser_info.OS.Name.String(), browser_info.Browser.Name.String(), browser_info.DeviceType.String(), time.Now(), ip, referer, campaign, medium, source, result.id)
+
+	_, err = db.Exec(context.Background(), "insert into logs(id,campaign,source,medium,os,browser,device_type,created_on,ip)values($1,$2,$3,$4,$5,$6,$7,$8,$9)", result.id, campaign, source, medium, browser_info.OS.Platform.String(), browser_info.Browser.Name.String(), browser_info.DeviceType.String(), time.Now(), ip)
 	if err != nil {
 		fmt.Println(err)
 		var pgError *pgconn.PgError
