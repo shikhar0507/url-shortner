@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -73,77 +72,6 @@ func HandleLinks(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		break
 	}
 
-}
-
-type Link struct {
-	Browser      map[string]int `json:browser`
-	Os           map[string]int `json:os`
-	Device_type  map[string]int `json:device_type`
-	Total_clicks int            `json:total_clicks`
-}
-
-type Links struct {
-	Result []map[string]interface{} `json:result`
-}
-
-func getLink(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool, resId string) {
-	query := `select browser,browser_count,os,os_count,device_type,device_count,t0.total_clicks from (select id,count(*) as total_clicks from logs where id='$1' group by id)t0 full outer join  (select browser,count(*) as browser_count,row_number () over() as num from logs where id='$1' group by browser order by browser_count desc) t1 on 1=1
-left join                                                                                                              
-(select os,count(*) as os_count, row_number() over() as num from logs where id='$1'  group by os order by os_count desc) t2 on t1.num = t2.num                                                                                                   
-left join 
-(select device_type,count(*) as device_count , row_number() over() as num from logs where id='$1' group by device_type order by device_count desc)t3 on t2.num = t3.num`
-	rows, err := db.Query(context.Background(), query, resId)
-	if err != nil {
-		utils.SendResponse(w, http.StatusInternalServerError, utils.Response{Status: http.StatusInternalServerError, Message: "Try again later"})
-		return
-	}
-	var link Link
-	for rows.Next() {
-		var browser, os, device_type string
-		var browserC, osC, device_typeC, total_clicks int32
-		rows.Scan(&browser, &browserC, &os, &osC, &device_type, &device_typeC, &total_clicks)
-		link.Browser[browser] = int(browserC)
-		link.Os[os] = int(osC)
-		link.Device_type[device_type] = int(device_typeC)
-		link.Total_clicks = int(total_clicks)
-	}
-	utils.SendResponse(w, http.StatusOK, link)
-}
-
-func getLinks(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool, username string) {
-	fmt.Println("fetching for username", username)
-	query := `with t as (
-select urls.id,urls.username,t2.device_type,t1.browser,t0.os,t4.total_clicks,sum(case when t4.total_clicks is not null then t4.total_clicks else 0 end) from urls
-left join (select id,count(*) as total_clicks from logs group by id order by total_clicks desc)t4 on t4.id = urls.id
-left join (select t.* from (select logs.id,logs.device_type, rank() over(partition by id order by count(device_type) desc) from logs group by logs.id,logs.device_type) t where rank=1)t2 on urls.id = t2.id
-left join (select t.* from (select logs.id,logs.browser, rank() over(partition by id order by count(browser) desc) from logs group by logs.id,logs.browser) t where rank=1) t1 on t2.id = t1.id
-left join  (select t.* from (select logs.id,logs.os, rank() over(partition by id order by count(os) desc) from logs group by logs.id,logs.os) t where rank=1)t0 on t1.id = t0.id group by urls.id,urls.username,t2.device_type,t1.browser,t0.os,t4.total_clicks
-order by sum desc)
-select t.id,t.username,t.browser,t.os,t.device_type,t.total_clicks from t where t.username=$1`
-
-	rows, err := db.Query(context.Background(), query, username)
-	if err != nil {
-		fmt.Println("links fetch", err)
-		utils.SendResponse(w, http.StatusInternalServerError, utils.Response{Status: http.StatusInternalServerError, Message: "Try again later"})
-		return
-	}
-	list := make([]map[string]interface{}, 0)
-
-	for rows.Next() {
-		var id, device_type, browser, os, username string
-		var total_clicks int
-		hash := make(map[string]interface{}, 0)
-		rows.Scan(&id, &username, &browser, &os, &device_type, &total_clicks)
-		hash["id"] = id
-		hash["username"] = username
-		hash["browser"] = browser
-		hash["os"] = os
-		hash["device_type"] = device_type
-		hash["total_clicks"] = total_clicks
-		list = append(list, hash)
-	}
-	links := Links{Result: list}
-	utils.SendResponse(w, http.StatusOK, links)
 }
 
 func handleShortner(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {

@@ -17,8 +17,8 @@ import (
 )
 
 type AuthBody struct {
-	Username string
-	Psswd    string
+	Username string `json:username`
+	Psswd    string `json:psswd`
 }
 type loggedIn struct {
 	Authenticated bool
@@ -179,7 +179,7 @@ func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 		Status  int
 	}
 	var logout Logout
-	success, err := json.Marshal(&logout)
+	success, err := json.Marshal(logout)
 	utils.SendResponse(w, http.StatusOK, success)
 }
 
@@ -242,10 +242,12 @@ func generatePsswdHash(psswd string) ([]byte, error) {
 */
 func GetSession(r *http.Request, db *pgxpool.Pool) (Session, error) {
 	sessionId := getSessionCookie(r)
-	//	var sessionResult string
-	//var sessionUsername string
-	session := Session{}
-	err := db.QueryRow(context.Background(), "select * from sessions where sessionid=$1", sessionId).Scan(session.SessionId, session.Username)
+	var id string
+	var username string
+	session := Session{SessionId: "", Username: ""}
+	err := db.QueryRow(context.Background(), "select * from sessions where sessionid=$1", sessionId).Scan(&username, &sessionId)
+	session.SessionId = id
+	session.Username = username
 	if err != nil {
 		return session, err
 	}
@@ -255,6 +257,7 @@ func GetSession(r *http.Request, db *pgxpool.Pool) (Session, error) {
 
 func getSessionCookie(r *http.Request) string {
 	coo, err := r.Cookie("sessionId")
+
 	if err != nil {
 		return ""
 	}
