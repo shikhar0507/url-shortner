@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"text/template"
 	"time"
 	"url-shortner/auth"
 	"url-shortner/utils"
@@ -31,9 +32,9 @@ type Api struct {
 type Links struct {
 }
 type Expiration struct {
-	Time          time.Time `json:time`
-	ExpirationUrl string    `json: url`
-	id            string    `json: id`
+	Time          string `json:time`
+	ExpirationUrl string `json:expirationUrl`
+	id            string `json: id`
 }
 type LinkAdd struct {
 	LongUrl         string     `json: longUrl`
@@ -43,8 +44,12 @@ type LinkAdd struct {
 	NotFoundUrl     string     `json: 404_page`
 	AndroidDeepLink string     `json: android_deep_link`
 	IosDeepLink     string     `json: ios_deep_link`
-	//	CountryBlock    []string          `json: country_block`
-	//IpRedirection   map[string]string `json:ip_redirection`
+}
+
+type storedUrl struct {
+	username string
+	data     LinkAdd
+	id       string
 }
 
 type Campaigns struct {
@@ -65,20 +70,6 @@ type Link struct {
 
 type GetLinks struct {
 	Result []map[string]interface{} `json:result`
-}
-
-type storedUrl struct {
-	id              string
-	url             string
-	username        string
-	Expiration      Expiration
-	Tag             string
-	Password        string
-	NotFoundUrl     string
-	AndroidDeepLink string
-	IosDeepLink     string
-	CountryBlock    []string
-	IpRedirection   map[string]string
 }
 
 func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +93,8 @@ func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		api.Links.ServeHTTP(w, r)
 	case "campaigns":
 		api.Campaigns.ServeHTTP(w, r)
+	case "link-auth":
+		validateLinkPassword(w, r)
 	case "index.html":
 		http.ServeFile(w, r, "index.html")
 	default:
@@ -116,6 +109,7 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	session, err := auth.GetSession(r, db)
 	fmt.Println(head)
 	if err != nil {
+
 		if err == pgx.ErrNoRows {
 			if r.Method == http.MethodPost && len(head) == 0 {
 				link.Add(w, r, session)
@@ -127,40 +121,84 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
 	}
 
-	if len(head) != 0 {
+	if len(head) == 0 {
 		switch r.Method {
 		case http.MethodOptions:
-			utils.HandleCors(w, r, []string{http.MethodDelete, http.MethodPut, http.MethodGet})
-		case http.MethodDelete:
-			link.Delete(w, r, head, session.Username)
-		case http.MethodPut:
-			link.Update(w, r, head, session.Username)
+			utils.HandleCors(w, r, []string{http.MethodGet, http.MethodPost})
+		case http.MethodPost:
+			link.Add(w, r, session)
 		case http.MethodGet:
-			link.Get(w, r, head, session.Username)
+			link.GetAll(w, r, session)
 		default:
-			utils.SendResponse(w, http.StatusMethodNotAllowed, "Wrong method")
+			fmt.Fprintf(w, "Option not supported")
 		}
-
 		return
 	}
 
 	switch r.Method {
 	case http.MethodOptions:
-		utils.HandleCors(w, r, []string{http.MethodGet, http.MethodPost})
-	case http.MethodPost:
-		link.Add(w, r, session)
+		utils.HandleCors(w, r, []string{http.MethodDelete, http.MethodPut, http.MethodGet})
+	case http.MethodDelete:
+		link.Delete(w, r, head, session.Username)
+	case http.MethodPut:
+		link.Update(w, r, head, session.Username)
 	case http.MethodGet:
-		link.GetAll(w, r, session)
+		link.Get(w, r, head, session.Username)
 	default:
-		fmt.Fprintf(w, "Option not supported")
+		utils.SendResponse(w, http.StatusMethodNotAllowed, "Wrong method")
 	}
+
+}
+
+func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
+	valid := false
+	switch r.Method {
+	case http.MethodOptions:
+		utils.HandleCors(w, r, []string{http.MethodPost})
+		break
+	case http.MethodPost:
+		valid = true
+	default:
+		utils.SendResponse(w, http.StatusMethodNotAllowed, "Wrong method")
+	}
+
+	if valid == false {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		return
+	}
+	psswd := r.Form.Get("psswd")
+	id := r.Form.Get("id")
+	if psswd == "" {
+		utils.SendResponse(w, http.StatusBadRequest, "Incorrect password")
+		return
+	}
+	if id == "" {
+		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		return
+	}
+	var rowPsswd, rowId, url string
+	err := db.QueryRow(context.Background(), "select id,url,password from urls where id=$1 and password=$2", id, psswd).Scan(&rowId, &url, &rowPsswd)
+	if err != nil {
+		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		return
+	}
+
+	link, err := getRedirectUrl(id)
+	if err != nil {
+		fmt.Println(err)
+	}
+	go updateLogs(r, link)
+	http.Redirect(w, r, url, http.StatusPermanentRedirect)
+
 }
 
 /**
   Add a new shortened url
  **/
 func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Session) {
-
 	var reqBody LinkAdd
 	result := requestJSON.Decode(w, r, &reqBody)
 	if result.Status != 200 {
@@ -174,8 +212,40 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 		utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
 		return
 	}
-
+	if reqBody.Expiration.Time != "" {
+		err := addExpiration(reqBody, shortId)
+		if err != nil {
+			fmt.Println(err)
+			var parseErr *time.ParseError
+			var dbErr *pgconn.PgError
+			if errors.As(err, &parseErr) {
+				utils.SendResponse(w, http.StatusBadRequest, "Expiration time is incorrect")
+				return
+			}
+			if errors.As(err, &dbErr) {
+				utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
+				return
+			}
+			return
+		}
+	}
 	utils.SendResponse(w, http.StatusOK, &LinkAdd{LongUrl: "http://localhost:8080/" + shortId})
+}
+
+func addExpiration(reqBody LinkAdd, shortId string) error {
+	timeT, err := time.Parse("Mon Jan 02 2006 15:04:05 MST-0700", reqBody.Expiration.Time)
+	if err != nil {
+		return err
+	}
+	expUrl := reqBody.Expiration.ExpirationUrl
+	if expUrl == "" {
+		expUrl = "http://localhost:8080"
+	}
+	_, dbErr := db.Exec(context.Background(), "insert into expiration values($1,$2,$3)", shortId, timeT.UTC(), expUrl)
+	if dbErr != nil {
+		return dbErr
+	}
+	return nil
 }
 
 /**
@@ -319,12 +389,27 @@ func main() {
 }
 
 func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
-	result, err := getRedirectUrl(id)
+	link, err := getRedirectUrl(id)
+	fmt.Println(link)
 	switch err {
 	case nil:
+		expTime, _ := time.Parse("Mon Jan 02 2006 15:04:05 MST-0700", link.data.Expiration.Time)
+		isAfter := link.data.Expiration.Time != "" && time.Now().After(expTime)
+		redirectUrl := link.data.LongUrl
+		if link.data.Password != "" {
+			temp := template.Must(template.ParseFiles("views/authentication.html"))
+			su := map[string]string{
+				"Id": link.id,
+			}
+			temp.Execute(w, su)
+			break
+		}
+		if isAfter {
+			redirectUrl = link.data.Expiration.ExpirationUrl
+		}
 
-		http.Redirect(w, r, result.url, http.StatusPermanentRedirect)
-		go updateLogs(r, result)
+		http.Redirect(w, r, redirectUrl, http.StatusPermanentRedirect)
+		go updateLogs(r, link)
 		break
 	case pgx.ErrNoRows:
 		//	fs := http.FileServer(http.Dir("public/build/"))
@@ -339,7 +424,7 @@ func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 func updateLogs(r *http.Request, result storedUrl) {
 
 	browser_info := uasurfer.Parse(r.UserAgent())
-	u, err := url.Parse(result.url)
+	u, err := url.Parse(result.data.LongUrl)
 	if err != nil {
 		fmt.Println("unable to parse short url long url")
 		return
@@ -360,31 +445,42 @@ func updateLogs(r *http.Request, result storedUrl) {
 		fmt.Println(err)
 		var pgError *pgconn.PgError
 		errors.As(err, &pgError)
+
 		fmt.Printf("%s at %d col %s %s %s", pgError.Message, pgError.Line, pgError.ColumnName, pgError.Detail, pgError.Hint)
 		return
 	}
 	fmt.Println("written to logs")
 }
 
-func getRedirectUrl(path string) (LinkAdd, error) {
+func getRedirectUrl(path string) (storedUrl, error) {
 	var su storedUrl
-	err := db.QueryRow(context.Background(), "select * from urls where id=$1", path).Scan(&su.id, &su.url, &su.username)
+	var id, longUrl, username, psswd, notFoundUrl, exp_url *string
+	var exp_time *time.Time
+	err := db.QueryRow(context.Background(), "select urls.id,urls.url,urls.username,urls.password,urls.not_found_url,expiration,expired_url from urls left join expiration on urls.id=expiration.id where urls.id=$1", path).Scan(&id, &longUrl, &username, &psswd, &notFoundUrl, &exp_time, &exp_url)
+
 	if err != nil {
+		fmt.Println("scan err", err)
 		return su, err
 
 	}
+	exp := Expiration{}
+	if exp_time != nil {
+		exp.Time = exp_time.String()
+	}
+	if exp_url != nil {
+		exp.ExpirationUrl = *exp_url
+	}
+	link := LinkAdd{LongUrl: *longUrl, Password: *psswd, NotFoundUrl: *notFoundUrl, Expiration: exp}
+	return storedUrl{id: *id, username: *username, data: link}, nil
 	return su, nil
 }
 
 func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, error) {
 	value := createId()
-	if reqBody.Expiration.Time > 0 && len(reqBody.Expiration.ExpirationUrl) == 0 {
-		return "", errors.New("Expiration Url not found")
-	}
 
 	mainErr := retry(100, 1000, func() error {
 
-		_, err := db.Exec(context.Background(), "insert into urls values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", value, reqBody.LongUrl, session.Username, reqBody.Tag, reqBody.Password, reqBody.NotFoundUrl, reqBody.AndroidDeepLink, reqBody.IosDeepLink)
+		_, err := db.Exec(context.Background(), "insert into urls values($1,$2,$3,$4,$5,$6,$7,$8)", value, reqBody.LongUrl, session.Username, reqBody.Tag, reqBody.Password, reqBody.NotFoundUrl, reqBody.AndroidDeepLink, reqBody.IosDeepLink)
 		if err == nil {
 			return nil
 

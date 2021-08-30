@@ -1,0 +1,13 @@
+<html>
+  <head>
+    <title>Authenticate</title>
+  </head>
+  <body>
+    <h1>Authenticate here</h1>
+    <form action="/link-auth" method="POST">
+      <input type="password" required name="psswd">
+      <input type="hidden" value={{.Id}} name="id">
+      <button type="submit">Submit</button>
+    </form>
+  </body>
+</html>
