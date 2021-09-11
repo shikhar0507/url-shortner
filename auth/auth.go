@@ -196,13 +196,12 @@ func userExists(username string, psswd string, db *pgxpool.Pool) bool {
 	if er != nil {
 		return false
 	}
-	fmt.Println("isSame")
 	return true
 
 }
 
 func createUser(username string, psswd string, db *pgxpool.Pool) error {
-	hash, err := generatePsswdHash(psswd)
+	hash, err := GeneratePsswdHash(psswd)
 	if err != nil {
 		return err
 	}
@@ -225,7 +224,7 @@ func generateUUID() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
 }
 
-func generatePsswdHash(psswd string) ([]byte, error) {
+func GeneratePsswdHash(psswd string) ([]byte, error) {
 
 	bytePsswd := []byte(psswd)
 	hash, err := bcrypt.GenerateFromPassword(bytePsswd, bcrypt.DefaultCost)

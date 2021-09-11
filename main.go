@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shikhar0507/requestJSON"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var db *pgxpool.Pool
@@ -72,6 +72,8 @@ type GetLinks struct {
 	Result []map[string]interface{} `json:result`
 }
 
+var count int = 0
+
 func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var head string
@@ -107,18 +109,10 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var head string
 	head, r.URL.Path = getSegment(r)
 	session, err := auth.GetSession(r, db)
-	fmt.Println(head)
-	if err != nil {
-
-		if err == pgx.ErrNoRows {
-			if r.Method == http.MethodPost && len(head) == 0 {
-				link.Add(w, r, session)
-				return
-			}
-			utils.SendResponse(w, http.StatusUnauthorized, "not authorized")
-			return
-		}
+	fmt.Println("request to links")
+	if err != nil && err != pgx.ErrNoRows {
 		utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
+		return
 	}
 
 	if len(head) == 0 {
@@ -126,6 +120,7 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodOptions:
 			utils.HandleCors(w, r, []string{http.MethodGet, http.MethodPost})
 		case http.MethodPost:
+			fmt.Println("add link")
 			link.Add(w, r, session)
 		case http.MethodGet:
 			link.GetAll(w, r, session)
@@ -179,9 +174,17 @@ func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
 		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
 		return
 	}
-	var rowPsswd, rowId, url string
-	err := db.QueryRow(context.Background(), "select id,url,password from urls where id=$1 and password=$2", id, psswd).Scan(&rowId, &url, &rowPsswd)
+	var rowPsswd, url string
+
+	err := db.QueryRow(context.Background(), "select password,url from urls where id=$1", id).Scan(&rowPsswd, &url)
 	if err != nil {
+		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(rowPsswd), []byte(psswd))
+	if err != nil {
+		fmt.Println("hash err", err)
 		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
 		return
 	}
@@ -191,6 +194,7 @@ func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 	}
 	go updateLogs(r, link)
+	fmt.Println("redirecting to", url)
 	http.Redirect(w, r, url, http.StatusPermanentRedirect)
 
 }
@@ -199,6 +203,8 @@ func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
   Add a new shortened url
  **/
 func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Session) {
+
+	fmt.Println("add link")
 	var reqBody LinkAdd
 	result := requestJSON.Decode(w, r, &reqBody)
 	if result.Status != 200 {
@@ -229,7 +235,11 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 			return
 		}
 	}
-	utils.SendResponse(w, http.StatusOK, &LinkAdd{LongUrl: "http://localhost:8080/" + shortId})
+
+	if shortId == "" {
+		log.Fatal(reqBody, count)
+	}
+	utils.SendResponse(w, http.StatusOK, &LinkAdd{LongUrl: "http://localhost:8080/" + shortId, Password: reqBody.Password})
 }
 
 func addExpiration(reqBody LinkAdd, shortId string) error {
@@ -376,13 +386,17 @@ func getSegment(r *http.Request) (string, string) {
 func main() {
 
 	fmt.Println("starting server")
+
 	dbpool, err := pgxpool.Connect(context.Background(), "postgres://xanadu:xanadu@localhost:5432/tracker")
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	db = dbpool
 	defer db.Close()
+
 	api := Api{}
+
 	err = http.ListenAndServe(":8080", api)
 
 	log.Fatal(err)
@@ -472,37 +486,63 @@ func getRedirectUrl(path string) (storedUrl, error) {
 	}
 	link := LinkAdd{LongUrl: *longUrl, Password: *psswd, NotFoundUrl: *notFoundUrl, Expiration: exp}
 	return storedUrl{id: *id, username: *username, data: link}, nil
-	return su, nil
+
 }
 
 func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, error) {
-	value := createId()
-
-	mainErr := retry(100, 1000, func() error {
-
-		_, err := db.Exec(context.Background(), "insert into urls values($1,$2,$3,$4,$5,$6,$7,$8)", value, reqBody.LongUrl, session.Username, reqBody.Tag, reqBody.Password, reqBody.NotFoundUrl, reqBody.AndroidDeepLink, reqBody.IosDeepLink)
-		if err == nil {
-			return nil
-
+	psswdHash := reqBody.Password
+	if psswdHash != "" {
+		hash, err := auth.GeneratePsswdHash(reqBody.Password)
+		if err != nil {
+			return "", err
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23505":
-				fmt.Println("creating a new id")
-				value = createId()
-				return err
-			}
-		}
-		return err
-	})
+		psswdHash = string(hash)
+	}
+	fmt.Println("psswd hash", psswdHash)
 
-	if mainErr != nil {
-		return "", mainErr
+	var nextId int64
+
+	err := db.QueryRow(context.Background(), "SELECT last_value + CASE WHEN is_called THEN 1 ELSE 0 END FROM urls_seq_seq").Scan(&nextId)
+	if err != nil {
+		return "", err
+	}
+	fmt.Println(nextId)
+	fmt.Println("generating uniqId...")
+	//uniqId := generateUniqId(62, int(nextId))
+	//fmt.Println("uniqId", uniqId)
+	var uniqId string
+
+	err = db.QueryRow(context.Background(), "SELECT insertLongUrl($1)", reqBody.LongUrl).Scan(&uniqId)
+	if err != nil {
+		count += 1
+		log.Fatal(err)
+		return "", nil
 	}
 
-	return value, nil
+	return uniqId, nil
 
+}
+func onNotify(c *pgconn.PgConn, n *pgconn.Notice) {
+
+	fmt.Println("Message:", *n)
+}
+
+func generateUniqId(base, number int) string {
+	indexMapping := "/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	stack := utils.Stack{}
+	stack.Init()
+	dividend := number
+	for dividend > 0 {
+		mod := dividend % base
+		dividend = dividend / base
+		stack.Push(int(mod))
+	}
+	uniqId := ""
+	for !stack.IsEmpty() {
+		item := stack.Pop()
+		uniqId += string(indexMapping[item])
+	}
+	return uniqId
 }
 
 func retry(count int, sleep time.Duration, f func() error) error {
@@ -519,14 +559,4 @@ func retry(count int, sleep time.Duration, f func() error) error {
 		return err
 	}
 	return nil
-}
-
-func createId() string {
-	letterString := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	result := ""
-	for i := 0; i < 6; i++ {
-		randStr := letterString[rand.Intn(len(letterString))]
-		result = result + string(randStr)
-	}
-	return result
 }
