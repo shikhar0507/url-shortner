@@ -15,13 +15,13 @@ CREATE OR REPLACE FUNCTION insertLongUrl(url TEXT) RETURNS VARCHAR AS $$
 	      	    	 	      SELECT CONCAT(indexMapping[modval],S) INTO S;
 			        end loop;
 				BEGIN
-					RAISE NOTICE 'mil';
-					INSERT INTO urls(id) VALUES(S);
+					RAISE NOTICE '%',S;
+					INSERT INTO urls(id) VALUES('aqH');
 					RETURN S;
 				EXCEPTION WHEN unique_violation THEN
-			  		  -- do nothing
-					  	  
-					  RAISE notice  'duplicate id %', S;
+			  		  -- do nothing				  	  
+					  RAISE EXCEPTION '';
+					  
 				END;
 	--	COMMIT;
 	END LOOP;

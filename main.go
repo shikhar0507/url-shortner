@@ -394,12 +394,24 @@ func main() {
 
 	db = dbpool
 	defer db.Close()
+	//go func() {
+	//conn, err := pgx.Connect(context.Background(), "postgres://xanadu:xanadu@localhost:5432/tracker")
+	conn, err := db.Acquire(context.Background())
+	if err != nil {
+		log.Fatal("conn err", err)
+	}
+
+	connection := conn.Conn()
+	connection.Config().OnNotice = onNotify
+
+	//	}()
 
 	api := Api{}
 
 	err = http.ListenAndServe(":8080", api)
 
 	log.Fatal(err)
+
 }
 
 func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
@@ -512,6 +524,7 @@ func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, erro
 	//fmt.Println("uniqId", uniqId)
 	var uniqId string
 
+	fmt.Println("query row")
 	err = db.QueryRow(context.Background(), "SELECT insertLongUrl($1)", reqBody.LongUrl).Scan(&uniqId)
 	if err != nil {
 		count += 1
