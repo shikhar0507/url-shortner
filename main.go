@@ -232,14 +232,12 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 
 	shortId, insErr := setId(r, reqBody, session)
 	if insErr != nil {
-		fmt.Println(insErr)
 		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
 	if reqBody.Expiration.Time != "" {
 		err := addExpiration(reqBody, shortId)
 		if err != nil {
-			fmt.Println(err)
 			var parseErr *time.ParseError
 			var dbErr *pgconn.PgError
 			if errors.As(err, &parseErr) {
@@ -252,10 +250,6 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 			}
 			return
 		}
-	}
-
-	if shortId == "" {
-		log.Fatal(reqBody, count)
 	}
 	utils.SendResponse(w, http.StatusOK, &LinkAdd{LongUrl: "http://localhost:8080/" + shortId, Password: reqBody.Password})
 }
@@ -291,7 +285,6 @@ select t.id,t.url,t.browser,t.os,t.device_type,coalesce(t.total_clicks,0) from t
 
 	rows, err := db.Query(context.Background(), query, sesstion.Username)
 	if err != nil {
-		fmt.Println("links fetch", err)
 		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
@@ -387,18 +380,15 @@ func (link Links) Update(w http.ResponseWriter, r *http.Request, id string, user
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			utils.SendResponse(w, http.StatusNotFound, UpdateMessage{Message: "Not found"})
+			utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("Link not found"))
 			return
 		}
-		utils.SendResponse(w, http.StatusNotFound, UpdateMessage{Message: "Try again later"})
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
 	updateMessage.newUrl = reqBody.LongUrl
 	updateMessage.Message = "Link updated"
 	utils.SendResponse(w, http.StatusOK, updateMessage)
-}
-
-func (campaign Campaigns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func getSegment(r *http.Request) (string, string) {
@@ -439,7 +429,6 @@ func main() {
 
 func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 	link, err := getRedirectUrl(id)
-	fmt.Println(link)
 	switch err {
 	case nil:
 		expTime, _ := time.Parse("Mon Jan 02 2006 15:04:05 MST-0700", link.data.Expiration.Time)
@@ -461,12 +450,10 @@ func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 		go updateLogs(r, link)
 		break
 	case pgx.ErrNoRows:
-		//	fs := http.FileServer(http.Dir("public/build/"))
-		//fs.ServeHTTP(w, r)
+		http.Redirect(w, r, "http://localhost:3000", http.StatusPermanentRedirect)
 		break
 	default:
-		resp := utils.Response{Status: http.StatusInternalServerError}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		fmt.Fprintf(w, "Error redirecting")
 	}
 }
 
@@ -475,7 +462,6 @@ func updateLogs(r *http.Request, result storedUrl) {
 	browser_info := uasurfer.Parse(r.UserAgent())
 	u, err := url.Parse(result.data.LongUrl)
 	if err != nil {
-		fmt.Println("unable to parse short url long url")
 		return
 	}
 	query := u.Query()
@@ -491,10 +477,8 @@ func updateLogs(r *http.Request, result storedUrl) {
 
 	_, err = db.Exec(context.Background(), "insert into logs(id,campaign,source,medium,os,browser,device_type,created_on,ip)values($1,$2,$3,$4,$5,$6,$7,$8,$9)", result.id, campaign, source, medium, browser_info.OS.Platform.String(), browser_info.Browser.Name.String(), browser_info.DeviceType.String(), time.Now(), ip)
 	if err != nil {
-		fmt.Println(err)
 		var pgError *pgconn.PgError
 		errors.As(err, &pgError)
-
 		fmt.Printf("%s at %d col %s %s %s", pgError.Message, pgError.Line, pgError.ColumnName, pgError.Detail, pgError.Hint)
 		return
 	}
@@ -532,22 +516,11 @@ func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, erro
 		}
 		psswdHash = string(hash)
 	}
-	fmt.Println("psswd hash", psswdHash)
 
-	var nextId int64
-
-	err := db.QueryRow(context.Background(), "SELECT last_value + CASE WHEN is_called THEN 1 ELSE 0 END FROM urls_seq_seq").Scan(&nextId)
+	var uniqId string
+	err := db.QueryRow(context.Background(), "SELECT insertLongUrl($1)", reqBody.LongUrl).Scan(&uniqId)
 	if err != nil {
 		return "", err
-	}
-	fmt.Println(nextId)
-	fmt.Println("generating uniqId...")
-	var uniqId string
-	fmt.Println("query row")
-	err = db.QueryRow(context.Background(), "SELECT insertLongUrl($1)", reqBody.LongUrl).Scan(&uniqId)
-	if err != nil {
-		log.Fatal(err)
-		return "", nil
 	}
 
 	return uniqId, nil
