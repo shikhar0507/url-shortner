@@ -16,6 +16,8 @@ import (
 
 	"github.com/avct/uasurfer"
 	"github.com/jackc/pgconn"
+	"github.com/jackc/pgtype"
+	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shikhar0507/requestJSON"
@@ -109,27 +111,42 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var head string
 	head, r.URL.Path = getSegment(r)
 	session, err := auth.GetSession(r, db)
-	fmt.Println("request to links")
-	if err != nil && err != pgx.ErrNoRows {
-		utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
+	fmt.Println("links")
+	unauthorized := true
+
+	if err != nil {
+		fmt.Println("links err", err)
+		if err != pgx.ErrNoRows {
+			utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Unauthorized"))
+			return
+		}
+		if len(head) == 0 && r.Method == http.MethodPost {
+			unauthorized = false
+		}
+	} else {
+		unauthorized = false
+	}
+	if unauthorized {
+		utils.SendResponse(w, http.StatusUnauthorized, utils.SendErrorToClient("Unauthorized"))
 		return
 	}
-
+	// request to /links
 	if len(head) == 0 {
 		switch r.Method {
 		case http.MethodOptions:
 			utils.HandleCors(w, r, []string{http.MethodGet, http.MethodPost})
 		case http.MethodPost:
-			fmt.Println("add link")
 			link.Add(w, r, session)
 		case http.MethodGet:
 			link.GetAll(w, r, session)
 		default:
-			fmt.Fprintf(w, "Option not supported")
+			utils.SendResponse(w, http.StatusMethodNotAllowed, utils.SendErrorToClient("Method not supported"))
+
 		}
 		return
 	}
 
+	// request to /link/<id>
 	switch r.Method {
 	case http.MethodOptions:
 		utils.HandleCors(w, r, []string{http.MethodDelete, http.MethodPut, http.MethodGet})
@@ -140,7 +157,7 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		link.Get(w, r, head, session.Username)
 	default:
-		utils.SendResponse(w, http.StatusMethodNotAllowed, "Wrong method")
+		utils.SendResponse(w, http.StatusMethodNotAllowed, utils.SendErrorToClient("Method not supported"))
 	}
 
 }
@@ -154,49 +171,50 @@ func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		valid = true
 	default:
-		utils.SendResponse(w, http.StatusMethodNotAllowed, "Wrong method")
+		utils.SendResponse(w, http.StatusMethodNotAllowed, utils.SendErrorToClient("Method not supported"))
 	}
 
 	if valid == false {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Parsing error"))
 		return
 	}
 	psswd := r.Form.Get("psswd")
 	id := r.Form.Get("id")
 	if psswd == "" {
-		utils.SendResponse(w, http.StatusBadRequest, "Incorrect password")
+		utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Incorrect password"))
 		return
 	}
 	if id == "" {
-		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Link id is missing"))
 		return
 	}
 	var rowPsswd, url string
 
 	err := db.QueryRow(context.Background(), "select password,url from urls where id=$1", id).Scan(&rowPsswd, &url)
 	if err != nil {
-		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("The requested link is not found or is expired"))
 		return
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(rowPsswd), []byte(psswd))
 	if err != nil {
-		fmt.Println("hash err", err)
-		utils.SendResponse(w, http.StatusInternalServerError, "Unable to process...")
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
 
 	link, err := getRedirectUrl(id)
-	if err != nil {
-		fmt.Println(err)
+	switch err {
+	case nil:
+		go updateLogs(r, link)
+		http.Redirect(w, r, url, http.StatusPermanentRedirect)
+	case pgx.ErrNoRows:
+		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("The requested link is not found or is expired"))
+	default:
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 	}
-	go updateLogs(r, link)
-	fmt.Println("redirecting to", url)
-	http.Redirect(w, r, url, http.StatusPermanentRedirect)
-
 }
 
 /**
@@ -215,7 +233,7 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 	shortId, insErr := setId(r, reqBody, session)
 	if insErr != nil {
 		fmt.Println(insErr)
-		utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
 	if reqBody.Expiration.Time != "" {
@@ -225,11 +243,11 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 			var parseErr *time.ParseError
 			var dbErr *pgconn.PgError
 			if errors.As(err, &parseErr) {
-				utils.SendResponse(w, http.StatusBadRequest, "Expiration time is incorrect")
+				utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Expiration time is incorrect"))
 				return
 			}
 			if errors.As(err, &dbErr) {
-				utils.SendResponse(w, http.StatusInternalServerError, "Try again later")
+				utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 				return
 			}
 			return
@@ -274,14 +292,14 @@ select t.id,t.url,t.browser,t.os,t.device_type,coalesce(t.total_clicks,0) from t
 	rows, err := db.Query(context.Background(), query, sesstion.Username)
 	if err != nil {
 		fmt.Println("links fetch", err)
-		utils.SendResponse(w, http.StatusInternalServerError, utils.Response{Status: http.StatusInternalServerError, Message: "Try again later"})
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
 
 	list := make([]map[string]interface{}, 0)
 
 	if rows.Err() != nil {
-		utils.SendResponse(w, http.StatusInternalServerError, "try again later")
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
 
@@ -326,10 +344,10 @@ left join
 	case nil:
 		utils.SendResponse(w, http.StatusOK, Link{Browser: *browser, BrowserCount: *browserC, Os: *os, OsCount: *osC, Device_type: *device_type, DeviceType_Count: *device_typeC, Total_clicks: *total_clicks})
 	case pgx.ErrNoRows:
-		utils.SendResponse(w, http.StatusNotFound, "Not found")
+		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("Not found"))
 	default:
 		log.Fatal(err)
-		utils.SendResponse(w, http.StatusInternalServerError, "try again later")
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 	}
 
 }
@@ -343,11 +361,17 @@ func (link Links) Delete(w http.ResponseWriter, r *http.Request, id, username st
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		utils.SendResponse(w, http.StatusNotFound, "Not found")
+		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("Not found"))
 		return
 	}
-	fmt.Println("rows affected", tag.RowsAffected())
-	utils.SendResponse(w, http.StatusOK, "Link removed")
+
+	utils.SendResponse(w, http.StatusOK, utils.SendErrorToClient("Link removed"))
+}
+
+type UpdateMessage struct {
+	Message string
+	oldUrl  string
+	newUrl  string
 }
 
 // Update the long url for a given id
@@ -358,19 +382,20 @@ func (link Links) Update(w http.ResponseWriter, r *http.Request, id string, user
 		utils.SendResponse(w, http.StatusInternalServerError, result.Message)
 		return
 	}
-
-	tag, err := db.Exec(context.Background(), "update urls set url=$1 where id=$2 and username=$3", reqBody.LongUrl, id, username)
+	updateMessage := &UpdateMessage{}
+	err := db.QueryRow(context.Background(), "BEGIN; SELECT url FROM urls WHERE id=$1 AND username=$2 FOR UPDATE; UPDATE urls SET url=$3 where id=$4 AND username=$5;COMMIT;", id, username, reqBody.LongUrl, id, username).Scan(updateMessage.oldUrl)
 
 	if err != nil {
-		fmt.Println(err)
+		if err == pgx.ErrNoRows {
+			utils.SendResponse(w, http.StatusNotFound, UpdateMessage{Message: "Not found"})
+			return
+		}
+		utils.SendResponse(w, http.StatusNotFound, UpdateMessage{Message: "Try again later"})
 		return
 	}
-	if tag.RowsAffected() == 0 {
-		utils.SendResponse(w, http.StatusNotFound, "Not found")
-		return
-	}
-	fmt.Println("rows affected", tag.RowsAffected())
-	utils.SendResponse(w, http.StatusOK, "Link updated")
+	updateMessage.newUrl = reqBody.LongUrl
+	updateMessage.Message = "Link updated"
+	utils.SendResponse(w, http.StatusOK, updateMessage)
 }
 
 func (campaign Campaigns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -387,29 +412,27 @@ func main() {
 
 	fmt.Println("starting server")
 
-	dbpool, err := pgxpool.Connect(context.Background(), "postgres://xanadu:xanadu@localhost:5432/tracker")
+	poolConfig, err := pgxpool.ParseConfig("postgres://xanadu:xanadu@localhost:5432/tracker")
 	if err != nil {
 		log.Fatal(err)
 	}
+	poolConfig.ConnConfig.OnNotice = onNotify
+	poolConfig.AfterConnect = func(c1 context.Context, c2 *pgx.Conn) error {
 
-	db = dbpool
-	defer db.Close()
-	//go func() {
-	//conn, err := pgx.Connect(context.Background(), "postgres://xanadu:xanadu@localhost:5432/tracker")
-	conn, err := db.Acquire(context.Background())
-	if err != nil {
-		log.Fatal("conn err", err)
+		c2.ConnInfo().RegisterDataType(pgtype.DataType{
+			Value: &pgtypeuuid.UUID{},
+			OID:   pgtype.UUIDOID,
+			Name:  "uuid",
+		})
+		return nil
 	}
-
-	connection := conn.Conn()
-	connection.Config().OnNotice = onNotify
-
-	//	}()
-
+	db, err = pgxpool.ConnectConfig(context.Background(), poolConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 	api := Api{}
-
 	err = http.ListenAndServe(":8080", api)
-
 	log.Fatal(err)
 
 }
@@ -485,7 +508,6 @@ func getRedirectUrl(path string) (storedUrl, error) {
 	err := db.QueryRow(context.Background(), "select urls.id,urls.url,urls.username,urls.password,urls.not_found_url,expiration,expired_url from urls left join expiration on urls.id=expiration.id where urls.id=$1", path).Scan(&id, &longUrl, &username, &psswd, &notFoundUrl, &exp_time, &exp_url)
 
 	if err != nil {
-		fmt.Println("scan err", err)
 		return su, err
 
 	}
@@ -520,14 +542,10 @@ func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, erro
 	}
 	fmt.Println(nextId)
 	fmt.Println("generating uniqId...")
-	//uniqId := generateUniqId(62, int(nextId))
-	//fmt.Println("uniqId", uniqId)
 	var uniqId string
-
 	fmt.Println("query row")
 	err = db.QueryRow(context.Background(), "SELECT insertLongUrl($1)", reqBody.LongUrl).Scan(&uniqId)
 	if err != nil {
-		count += 1
 		log.Fatal(err)
 		return "", nil
 	}
@@ -538,38 +556,4 @@ func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, erro
 func onNotify(c *pgconn.PgConn, n *pgconn.Notice) {
 
 	fmt.Println("Message:", *n)
-}
-
-func generateUniqId(base, number int) string {
-	indexMapping := "/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	stack := utils.Stack{}
-	stack.Init()
-	dividend := number
-	for dividend > 0 {
-		mod := dividend % base
-		dividend = dividend / base
-		stack.Push(int(mod))
-	}
-	uniqId := ""
-	for !stack.IsEmpty() {
-		item := stack.Pop()
-		uniqId += string(indexMapping[item])
-	}
-	return uniqId
-}
-
-func retry(count int, sleep time.Duration, f func() error) error {
-	err := f()
-	if err != nil {
-		if s, ok := err.(stop); ok {
-			return s.error
-		}
-		count--
-		if count > 0 {
-			time.Sleep(sleep)
-			return retry(count, 1*sleep, f)
-		}
-		return err
-	}
-	return nil
 }

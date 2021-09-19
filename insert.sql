@@ -7,7 +7,7 @@ CREATE OR REPLACE FUNCTION insertLongUrl(url TEXT) RETURNS VARCHAR AS $$
 	
        BEGIN
         loop
-	--	BEGIN		
+				
 				SELECT  last_value + CASE WHEN is_called THEN 1 ELSE 0 END FROM urls_seq_seq INTO nextId;
 				while nextId > 0 loop
 	      	      		      modval := nextId % 62;
@@ -16,14 +16,13 @@ CREATE OR REPLACE FUNCTION insertLongUrl(url TEXT) RETURNS VARCHAR AS $$
 			        end loop;
 				BEGIN
 					RAISE NOTICE '%',S;
-					INSERT INTO urls(id) VALUES('aqH');
+					INSERT INTO urls(id) VALUES(S);
 					RETURN S;
 				EXCEPTION WHEN unique_violation THEN
-			  		  -- do nothing				  	  
-					  RAISE EXCEPTION '';
-					  
+			  		  -- do nothing
 				END;
-	--	COMMIT;
+	
 	END LOOP;
+       COMMIT;
        END;
 $$ LANGUAGE plpgsql;

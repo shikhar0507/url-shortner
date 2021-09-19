@@ -2,14 +2,14 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
-
 	"url-shortner/utils"
 
+	"github.com/gofrs/uuid"
+	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shikhar0507/requestJSON"
@@ -30,12 +30,10 @@ type Session struct {
 
 func Signup(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 	optns := utils.HandleCors(w, r, []string{"http.MethodPost"})
-	if optns == true {
+	if optns {
 		return
 	}
 	var signupBody AuthBody
-	//var result requestDecoder.Result
-
 	result := requestJSON.Decode(w, r, &signupBody)
 	if result.Status != 200 {
 		utils.SendResponse(w, result.Status, result)
@@ -43,36 +41,30 @@ func Signup(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 	}
 
 	if signupBody.Username == "" {
-		resp := utils.Response{Status: http.StatusBadRequest, Message: "Username cannot be empty"}
-		utils.SendResponse(w, http.StatusBadRequest, resp)
+		utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Username cannot be empty"))
 		return
 	}
 
 	if signupBody.Psswd == "" {
-		resp := utils.Response{Status: http.StatusBadRequest, Message: "Password cannot be empty"}
-		utils.SendResponse(w, http.StatusBadRequest, resp)
+		utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Password cannot be empty"))
 		return
 	}
-	fmt.Println("check for  user")
+
 	if userExists(signupBody.Username, signupBody.Psswd, db) {
-		resp := utils.Response{Message: "Account-already-exist", Status: http.StatusConflict}
-		utils.SendResponse(w, http.StatusConflict, resp)
+		utils.SendResponse(w, http.StatusConflict, utils.SendErrorToClient("Account already exist"))
 		return
 	}
 
 	err := createUser(signupBody.Username, signupBody.Psswd, db)
 	if err != nil {
-		resp := utils.Response{Status: http.StatusInternalServerError, Message: "Error creating user"}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Error creating user"))
 		return
 	}
 	successResponse, marshalErr := json.Marshal(result)
 	if marshalErr != nil {
-		resp := utils.Response{Status: http.StatusInternalServerError, Message: "Error creating response"}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Error creating response"))
 		return
 	}
-	fmt.Println("account created", successResponse)
 	utils.SendResponse(w, http.StatusOK, successResponse)
 
 }
@@ -89,37 +81,25 @@ func Signin(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 	}
 
 	if signinBody.Username == "" {
-		resp := utils.Response{Status: http.StatusBadRequest, Message: "Username cannot be empty"}
-		utils.SendResponse(w, http.StatusBadRequest, resp)
+		utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Username cannot be empty"))
 		return
 	}
 	if signinBody.Psswd == "" {
-		resp := utils.Response{Status: http.StatusBadRequest, Message: "Password cannot be empty"}
-		utils.SendResponse(w, http.StatusBadRequest, resp)
+		utils.SendResponse(w, http.StatusBadRequest, utils.SendErrorToClient("Password cannot be empty"))
 		return
 	}
 	if userExists(signinBody.Username, signinBody.Psswd, db) == false {
-		fmt.Println("User does not exist")
-		resp := utils.Response{Status: http.StatusNotFound, Message: "Account does not exist"}
-		utils.SendResponse(w, http.StatusNotFound, resp)
+		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("Account does not exist"))
 		return
 	}
-	uuid, err := generateUUID()
-	if err != nil {
-		resp := utils.Response{Status: http.StatusInternalServerError}
-		utils.SendResponse(w, http.StatusNotFound, resp)
-		return
-	}
-	_, err = db.Exec(context.Background(), "insert into sessions values($1,$2)", signinBody.Username, uuid)
-	if err != nil {
-		fmt.Println(err)
-		resp := utils.Response{Status: http.StatusInternalServerError}
-		utils.SendResponse(w, http.StatusNotFound, resp)
-		return
-	}
-	//fmt.Print("Failed to create user")
-	cookie := http.Cookie{Name: "sessionId", Value: uuid, HttpOnly: true, Expires: time.Now().AddDate(2022, 11, 22), Path: "/", Secure: true, SameSite: http.SameSiteNoneMode}
 
+	var sessionId pgtypeuuid.UUID
+	err := db.QueryRow(context.Background(), "insert into sessions(username) values($1) RETURNING sessionId", signinBody.Username).Scan(&sessionId)
+	if err != nil {
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
+		return
+	}
+	cookie := http.Cookie{Name: "sessionId", Value: sessionId.UUID.String(), HttpOnly: true, Expires: time.Now().AddDate(2022, 11, 22), Path: "/", Secure: true, SameSite: http.SameSiteNoneMode}
 	http.SetCookie(w, &cookie)
 	resp := utils.Response{Status: http.StatusOK, Message: "Logged in"}
 	utils.SendResponse(w, http.StatusOK, resp)
@@ -131,11 +111,9 @@ func CheckAuth(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 	if optns == true {
 		return
 	}
-	fmt.Println(r.Method)
-	session, err := GetSession(r, db)
+	_, err := GetSession(r, db)
 	switch err {
 	case nil:
-		fmt.Println("found user", session.SessionId)
 		resp := loggedIn{Authenticated: true}
 		utils.SendResponse(w, http.StatusOK, resp)
 	case pgx.ErrNoRows:
@@ -154,17 +132,14 @@ func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 	}
 
 	session, err := GetSession(r, db)
-	fmt.Println("logout")
+
 	if err != nil {
-		fmt.Println(err)
-		resp := utils.Response{Status: http.StatusInternalServerError, Message: "Error logging out"}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Error logging out"))
 		return
 	}
 	_, err = db.Exec(context.Background(), "delete from sessions where username=$1 AND sessionid=$2", session.Username, session.SessionId)
 	if err != nil {
-		resp := utils.Response{Status: http.StatusInternalServerError, Message: "Error logging out"}
-		utils.SendResponse(w, http.StatusInternalServerError, resp)
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Error logging out"))
 		return
 	}
 	coo, err := r.Cookie("sessionId")
@@ -190,8 +165,6 @@ func userExists(username string, psswd string, db *pgxpool.Pool) bool {
 	if err != nil {
 		return false
 	}
-	fmt.Println(savedUsername, savedHash)
-
 	er := bcrypt.CompareHashAndPassword([]byte(savedHash), []byte(psswd))
 	if er != nil {
 		return false
@@ -205,7 +178,6 @@ func createUser(username string, psswd string, db *pgxpool.Pool) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("hash", string(hash))
 	_, err = db.Exec(context.Background(), "insert into auth values($1,$2)", username, hash)
 	if err != nil {
 		fmt.Println(err)
@@ -215,21 +187,11 @@ func createUser(username string, psswd string, db *pgxpool.Pool) error {
 
 }
 
-func generateUUID() (string, error) {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
-}
-
 func GeneratePsswdHash(psswd string) ([]byte, error) {
 
 	bytePsswd := []byte(psswd)
 	hash, err := bcrypt.GenerateFromPassword(bytePsswd, bcrypt.DefaultCost)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 	return hash, nil
@@ -240,12 +202,18 @@ func GeneratePsswdHash(psswd string) ([]byte, error) {
   Returns username,sessionId and error
 */
 func GetSession(r *http.Request, db *pgxpool.Pool) (Session, error) {
-	sessionId := getSessionCookie(r)
-	var id string
+	sessionCookie := getSessionCookie(r)
+	fmt.Println("session cookie", sessionCookie)
+	var sessionId pgtypeuuid.UUID
 	var username string
 	session := Session{SessionId: "", Username: ""}
-	err := db.QueryRow(context.Background(), "select * from sessions where sessionid=$1", sessionId).Scan(&username, &sessionId)
-	session.SessionId = id
+	sessionUUID, err := uuid.FromString(sessionCookie)
+	if err != nil {
+		return session, err
+	}
+
+	err = db.QueryRow(context.Background(), "select * from sessions where sessionid=$1", sessionUUID).Scan(&username, &sessionId)
+	session.SessionId = sessionId.UUID.String()
 	session.Username = username
 	if err != nil {
 		return session, err
@@ -256,7 +224,6 @@ func GetSession(r *http.Request, db *pgxpool.Pool) (Session, error) {
 
 func getSessionCookie(r *http.Request) string {
 	coo, err := r.Cookie("sessionId")
-
 	if err != nil {
 		return ""
 	}

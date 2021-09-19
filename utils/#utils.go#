@@ -1,0 +1,102 @@
+package utils
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"strings"
+)
+
+func init() {
+	fmt.Println("queue initialized")
+}
+
+type Stack struct {
+	top      int
+	arr      [668941]int
+	capacity int
+}
+
+func (s *Stack) Init() {
+	s.top = -1
+	s.capacity = 668941
+}
+
+func (s *Stack) Push(value int) {
+	if s.top == s.capacity-1 {
+		log.Fatal("push operation : stack overflow")
+	}
+	s.top++
+	s.arr[s.top] = value
+
+}
+
+func (s *Stack) Pop() int {
+	if s.IsEmpty() {
+		log.Fatal("pop operation: stack underflow")
+	}
+	lastEl := s.arr[s.top]
+	s.arr[s.top] = 0
+	s.top--
+	return lastEl
+}
+
+func (s *Stack) IsEmpty() bool {
+	if s.top == -1 {
+		return true
+	}
+	return false
+}
+func (s *Stack) Peek() int {
+	if s.top == -1 {
+		log.Fatal("Stack is empty")
+	}
+	return s.arr[s.top]
+}
+
+type Response struct {
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+}
+
+type SuccesRes struct {
+	Status int    `json:"status"`
+	Url    string `json:"url"`
+}
+
+func HandleCors(w http.ResponseWriter, r *http.Request, methods []string) bool {
+	if r.Method == "OPTIONS" {
+		w.Header().Add("Access-Control-Allow-Origin", "*")
+		w.Header().Add("Access-Control-Allow-Methods", strings.Join(methods, ","))
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Add("Access-Control-Allow-Credentials", "true")
+		w.WriteHeader(http.StatusOK)
+
+		return true
+	}
+	return false
+}
+
+func SendResponse(w http.ResponseWriter, status int, body interface{}) {
+	w.Header().Add("Access-Control-Allow-Origin", "*")
+	w.Header().Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
+	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Add("Access-Control-Allow-Credentials", "true")
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	j, err := json.Marshal(body)
+	fmt.Println(string(j))
+	if err != nil {
+		errResp := Response{Message: "Error", Status: http.StatusInternalServerError}
+		finalMsg, err := json.Marshal(errResp)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Fprintf(w, string(finalMsg))
+		return
+	}
+	fmt.Fprintf(w, string(j))
+}

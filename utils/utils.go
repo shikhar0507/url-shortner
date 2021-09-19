@@ -3,7 +3,6 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 )
@@ -12,47 +11,8 @@ func init() {
 	fmt.Println("queue initialized")
 }
 
-type Stack struct {
-	top      int
-	arr      [668941]int
-	capacity int
-}
-
-func (s *Stack) Init() {
-	s.top = -1
-	s.capacity = 668941
-}
-
-func (s *Stack) Push(value int) {
-	if s.top == s.capacity-1 {
-		log.Fatal("push operation : stack overflow")
-	}
-	s.top++
-	s.arr[s.top] = value
-
-}
-
-func (s *Stack) Pop() int {
-	if s.IsEmpty() {
-		log.Fatal("pop operation: stack underflow")
-	}
-	lastEl := s.arr[s.top]
-	s.arr[s.top] = 0
-	s.top--
-	return lastEl
-}
-
-func (s *Stack) IsEmpty() bool {
-	if s.top == -1 {
-		return true
-	}
-	return false
-}
-func (s *Stack) Peek() int {
-	if s.top == -1 {
-		log.Fatal("Stack is empty")
-	}
-	return s.arr[s.top]
+type ClientError struct {
+	Message string
 }
 
 type Response struct {
@@ -63,6 +23,10 @@ type Response struct {
 type SuccesRes struct {
 	Status int    `json:"status"`
 	Url    string `json:"url"`
+}
+
+func SendErrorToClient(message string) ClientError {
+	return ClientError{Message: message}
 }
 
 func HandleCors(w http.ResponseWriter, r *http.Request, methods []string) bool {
