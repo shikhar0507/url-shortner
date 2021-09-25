@@ -17,6 +17,34 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: 
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+--
+-- Name: uuid-ossp; Type: EXTENSION; Schema: -; Owner: 
+--
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
+
+
+--
 -- Name: insertlongurl(text); Type: FUNCTION; Schema: public; Owner: xanadu
 --
 
@@ -31,7 +59,7 @@ CREATE FUNCTION public.insertlongurl(url text) RETURNS character varying
 	
        BEGIN
         loop
-	--	BEGIN		
+				
 				SELECT  last_value + CASE WHEN is_called THEN 1 ELSE 0 END FROM urls_seq_seq INTO nextId;
 				while nextId > 0 loop
 	      	      		      modval := nextId % 62;
@@ -39,16 +67,15 @@ CREATE FUNCTION public.insertlongurl(url text) RETURNS character varying
 	      	    	 	      SELECT CONCAT(indexMapping[modval],S) INTO S;
 			        end loop;
 				BEGIN
-					RAISE NOTICE 'mil';
+					RAISE NOTICE '%',S;
 					INSERT INTO urls(id) VALUES(S);
 					RETURN S;
 				EXCEPTION WHEN unique_violation THEN
 			  		  -- do nothing
-					  	  
-					  RAISE notice  'duplicate id %', S;
 				END;
-	--	COMMIT;
+	
 	END LOOP;
+       COMMIT;
        END;
 $$;
 
@@ -72,30 +99,6 @@ CREATE TABLE public.auth (
 ALTER TABLE public.auth OWNER TO xanadu;
 
 --
--- Name: country; Type: TABLE; Schema: public; Owner: xanadu
---
-
-CREATE TABLE public.country (
-    id integer NOT NULL,
-    name character varying(80) NOT NULL
-);
-
-
-ALTER TABLE public.country OWNER TO xanadu;
-
---
--- Name: country_block; Type: TABLE; Schema: public; Owner: xanadu
---
-
-CREATE TABLE public.country_block (
-    id character varying(6) NOT NULL,
-    name character varying(80) NOT NULL
-);
-
-
-ALTER TABLE public.country_block OWNER TO xanadu;
-
---
 -- Name: expiration; Type: TABLE; Schema: public; Owner: xanadu
 --
 
@@ -107,32 +110,6 @@ CREATE TABLE public.expiration (
 
 
 ALTER TABLE public.expiration OWNER TO xanadu;
-
---
--- Name: ip_address_to_country; Type: TABLE; Schema: public; Owner: xanadu
---
-
-CREATE TABLE public.ip_address_to_country (
-    ip cidr NOT NULL,
-    country character varying(80) NOT NULL
-);
-
-
-ALTER TABLE public.ip_address_to_country OWNER TO xanadu;
-
---
--- Name: ip_redirect; Type: TABLE; Schema: public; Owner: xanadu
---
-
-CREATE TABLE public.ip_redirect (
-    id character varying(6) NOT NULL,
-    url text NOT NULL,
-    country character varying(80) NOT NULL,
-    redirect_url text NOT NULL
-);
-
-
-ALTER TABLE public.ip_redirect OWNER TO xanadu;
 
 --
 -- Name: logs; Type: TABLE; Schema: public; Owner: xanadu
@@ -160,7 +137,7 @@ ALTER TABLE public.logs OWNER TO xanadu;
 
 CREATE TABLE public.sessions (
     username character varying(20),
-    sessionid character varying(100)
+    sessionid uuid DEFAULT public.uuid_generate_v4() NOT NULL
 );
 
 
@@ -171,7 +148,7 @@ ALTER TABLE public.sessions OWNER TO xanadu;
 --
 
 CREATE TABLE public.urls (
-    id character varying(6) NOT NULL,
+    id character varying(62) NOT NULL,
     url character varying(2083),
     username character varying(20),
     tag character varying(20),
@@ -215,22 +192,6 @@ ALTER TABLE ONLY public.urls ALTER COLUMN seq SET DEFAULT nextval('public.urls_s
 
 
 --
--- Name: auth auth_pkey; Type: CONSTRAINT; Schema: public; Owner: xanadu
---
-
-ALTER TABLE ONLY public.auth
-    ADD CONSTRAINT auth_pkey PRIMARY KEY (username);
-
-
---
--- Name: country country_pkey; Type: CONSTRAINT; Schema: public; Owner: xanadu
---
-
-ALTER TABLE ONLY public.country
-    ADD CONSTRAINT country_pkey PRIMARY KEY (id);
-
-
---
 -- Name: expiration expiration_pkey; Type: CONSTRAINT; Schema: public; Owner: xanadu
 --
 
@@ -255,13 +216,6 @@ ALTER TABLE ONLY public.urls
 
 
 --
--- Name: country_idx_ip_redirect; Type: INDEX; Schema: public; Owner: xanadu
---
-
-CREATE INDEX country_idx_ip_redirect ON public.ip_redirect USING btree (country);
-
-
---
 -- Name: hash_idx_auth; Type: INDEX; Schema: public; Owner: xanadu
 --
 
@@ -269,24 +223,10 @@ CREATE INDEX hash_idx_auth ON public.auth USING hash (hash);
 
 
 --
--- Name: id_idx_country_block; Type: INDEX; Schema: public; Owner: xanadu
---
-
-CREATE INDEX id_idx_country_block ON public.country_block USING btree (id);
-
-
---
 -- Name: id_idx_expiration; Type: INDEX; Schema: public; Owner: xanadu
 --
 
 CREATE INDEX id_idx_expiration ON public.expiration USING btree (id);
-
-
---
--- Name: id_idx_ip_redirect; Type: INDEX; Schema: public; Owner: xanadu
---
-
-CREATE INDEX id_idx_ip_redirect ON public.ip_redirect USING btree (id);
 
 
 --
@@ -301,27 +241,6 @@ CREATE INDEX id_idx_logs ON public.logs USING btree (id);
 --
 
 CREATE INDEX id_idx_urls ON public.urls USING btree (id);
-
-
---
--- Name: ip_idx_ip_address_to_country; Type: INDEX; Schema: public; Owner: xanadu
---
-
-CREATE INDEX ip_idx_ip_address_to_country ON public.ip_address_to_country USING btree (ip);
-
-
---
--- Name: name_idx_country; Type: INDEX; Schema: public; Owner: xanadu
---
-
-CREATE INDEX name_idx_country ON public.country USING btree (name);
-
-
---
--- Name: name_idx_country_block; Type: INDEX; Schema: public; Owner: xanadu
---
-
-CREATE INDEX name_idx_country_block ON public.country_block USING btree (name);
 
 
 --

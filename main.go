@@ -95,8 +95,6 @@ func (api Api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "links":
 		fmt.Println("got links")
 		api.Links.ServeHTTP(w, r)
-	case "campaigns":
-		api.Campaigns.ServeHTTP(w, r)
 	case "link-auth":
 		validateLinkPassword(w, r)
 	case "index.html":
