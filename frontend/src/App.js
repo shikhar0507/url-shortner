@@ -1,4 +1,3 @@
-import './App.scss';
 import React from 'react';
 import {BrowserRouter as Router,
   Switch,
@@ -10,6 +9,9 @@ import Navbar from './navbar';
 import Auth from './Auth';
 import Campaign from './Campaign';
 import Home from './Home';
+import './App.scss'
+
+
 class App extends React.Component {
   constructor(props) {
     super(props)

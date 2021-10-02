@@ -1,10 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-
 import reportWebVitals from './reportWebVitals';
 import {App} from './App'
+
 const Footer = () => {
   return (
+    <div>
     <footer className="footer is-light">
       <div className="content has-text-centered">
         <p>
@@ -12,10 +13,9 @@ const Footer = () => {
         </p>
       </div>
     </footer>
+    </div>
   )
 }
-
-
 
 
 ReactDOM.render(
@@ -25,6 +25,9 @@ ReactDOM.render(
   </React.StrictMode>,
   document.getElementById('root')
 );
+
+
+
 
 
 

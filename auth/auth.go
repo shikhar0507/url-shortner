@@ -126,7 +126,7 @@ func CheckAuth(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
 }
 
 func Logout(w http.ResponseWriter, r *http.Request, db *pgxpool.Pool) {
-	optns := utils.HandleCors(w, r, []string{" http.MethodDelete"})
+	optns := utils.HandleCors(w, r, []string{http.MethodDelete})
 	if optns == true {
 		return
 	}
@@ -203,10 +203,12 @@ func GeneratePsswdHash(psswd string) ([]byte, error) {
 */
 func GetSession(r *http.Request, db *pgxpool.Pool) (Session, error) {
 	sessionCookie := getSessionCookie(r)
-	fmt.Println("session cookie", sessionCookie)
 	var sessionId pgtypeuuid.UUID
 	var username string
 	session := Session{SessionId: "", Username: ""}
+	if sessionCookie == "" {
+		return session, pgx.ErrNoRows
+	}
 	sessionUUID, err := uuid.FromString(sessionCookie)
 	if err != nil {
 		return session, err

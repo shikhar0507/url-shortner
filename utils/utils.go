@@ -7,10 +7,6 @@ import (
 	"strings"
 )
 
-func init() {
-	fmt.Println("queue initialized")
-}
-
 type ClientError struct {
 	Message string
 }
@@ -31,7 +27,7 @@ func SendErrorToClient(message string) ClientError {
 
 func HandleCors(w http.ResponseWriter, r *http.Request, methods []string) bool {
 	if r.Method == "OPTIONS" {
-		w.Header().Add("Access-Control-Allow-Origin", "*")
+		w.Header().Add("Access-Control-Allow-Origin", "http://localhost:3000")
 		w.Header().Add("Access-Control-Allow-Methods", strings.Join(methods, ","))
 		w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
 		w.Header().Add("Access-Control-Allow-Credentials", "true")
@@ -43,7 +39,7 @@ func HandleCors(w http.ResponseWriter, r *http.Request, methods []string) bool {
 }
 
 func SendResponse(w http.ResponseWriter, status int, body interface{}) {
-	w.Header().Add("Access-Control-Allow-Origin", "*")
+	w.Header().Add("Access-Control-Allow-Origin", "http://localhost:3000")
 	w.Header().Add("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PUT,DELETE")
 	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Add("Access-Control-Allow-Credentials", "true")

@@ -109,23 +109,14 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var head string
 	head, r.URL.Path = getSegment(r)
 	session, err := auth.GetSession(r, db)
-	fmt.Println("links")
-	unauthorized := true
-
 	if err != nil {
-		fmt.Println("links err", err)
-		if err != pgx.ErrNoRows {
-			utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Unauthorized"))
+		// no session
+		if err == pgx.ErrNoRows {
+			fmt.Println("shortening")
+			shorten(w, r, session, link)
 			return
 		}
-		if len(head) == 0 && r.Method == http.MethodPost {
-			unauthorized = false
-		}
-	} else {
-		unauthorized = false
-	}
-	if unauthorized {
-		utils.SendResponse(w, http.StatusUnauthorized, utils.SendErrorToClient("Unauthorized"))
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
 	// request to /links
@@ -160,6 +151,19 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func shorten(w http.ResponseWriter, r *http.Request, session auth.Session, link Links) {
+	switch r.Method {
+	case http.MethodOptions:
+		utils.HandleCors(w, r, []string{http.MethodGet})
+	case http.MethodPost:
+		link.Add(w, r, session)
+	default:
+		utils.SendResponse(w, http.StatusMethodNotAllowed, utils.SendErrorToClient("Method not supported"))
+
+	}
+	return
+}
+
 func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
 	valid := false
 	switch r.Method {
@@ -190,8 +194,9 @@ func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var rowPsswd, url string
+	var username pgtype.Varchar
 
-	err := db.QueryRow(context.Background(), "select password,url from urls where id=$1", id).Scan(&rowPsswd, &url)
+	err := db.QueryRow(context.Background(), "select password,url,username from urls where id=$1", id).Scan(&rowPsswd, &url, &username)
 	if err != nil {
 		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("The requested link is not found or is expired"))
 		return
@@ -199,18 +204,23 @@ func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
 
 	err = bcrypt.CompareHashAndPassword([]byte(rowPsswd), []byte(psswd))
 	if err != nil {
-		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
+		fmt.Println(err)
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Incorrect password"))
 		return
 	}
 
 	link, err := getRedirectUrl(id)
 	switch err {
 	case nil:
-		go updateLogs(r, link)
+		fmt.Println("username status", username.Status, username.String)
+		if username.Status != pgtype.Null {
+			go updateLogs(r, link)
+		}
 		http.Redirect(w, r, url, http.StatusPermanentRedirect)
 	case pgx.ErrNoRows:
 		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("The requested link is not found or is expired"))
 	default:
+		fmt.Println(err)
 		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 	}
 }
@@ -427,6 +437,7 @@ func main() {
 
 func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 	link, err := getRedirectUrl(id)
+
 	switch err {
 	case nil:
 		expTime, _ := time.Parse("Mon Jan 02 2006 15:04:05 MST-0700", link.data.Expiration.Time)
@@ -445,7 +456,9 @@ func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 		}
 
 		http.Redirect(w, r, redirectUrl, http.StatusPermanentRedirect)
-		go updateLogs(r, link)
+		if link.username != "" {
+			go updateLogs(r, link)
+		}
 		break
 	case pgx.ErrNoRows:
 		http.Redirect(w, r, "http://localhost:3000", http.StatusPermanentRedirect)
@@ -485,24 +498,27 @@ func updateLogs(r *http.Request, result storedUrl) {
 
 func getRedirectUrl(path string) (storedUrl, error) {
 	var su storedUrl
-	var id, longUrl, username, psswd, notFoundUrl, exp_url *string
-	var exp_time *time.Time
+	var id, username, psswd pgtype.Varchar
+	var longUrl, notFoundUrl, exp_url pgtype.Text
+	var exp_time pgtype.Timestamptz
 	err := db.QueryRow(context.Background(), "select urls.id,urls.url,urls.username,urls.password,urls.not_found_url,expiration,expired_url from urls left join expiration on urls.id=expiration.id where urls.id=$1", path).Scan(&id, &longUrl, &username, &psswd, &notFoundUrl, &exp_time, &exp_url)
+
+	fmt.Println(id)
 
 	if err != nil {
 		return su, err
 
 	}
 	exp := Expiration{}
-	if exp_time != nil {
-		exp.Time = exp_time.String()
+	if exp_time.Status != pgtype.Null {
+		exp.Time = exp_time.Time.String()
 	}
-	if exp_url != nil {
-		exp.ExpirationUrl = *exp_url
+	if exp_url.Status != pgtype.Null {
+		exp.ExpirationUrl = exp_url.String
 	}
-	link := LinkAdd{LongUrl: *longUrl, Password: *psswd, NotFoundUrl: *notFoundUrl, Expiration: exp}
-	return storedUrl{id: *id, username: *username, data: link}, nil
 
+	link := LinkAdd{LongUrl: longUrl.String, Password: psswd.String, NotFoundUrl: notFoundUrl.String, Expiration: exp}
+	return storedUrl{id: id.String, username: username.String, data: link}, nil
 }
 
 func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, error) {
@@ -516,7 +532,17 @@ func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, erro
 	}
 
 	var uniqId string
-	err := db.QueryRow(context.Background(), "SELECT insertLongUrl($1)", reqBody.LongUrl).Scan(&uniqId)
+
+	err := db.QueryRow(context.Background(), "SELECT insertLongUrl($1,$2)", reqBody.LongUrl, session.Username).Scan(&uniqId)
+	if err != nil {
+		return "", err
+	}
+
+	hashedPsswd, err := bcrypt.GenerateFromPassword([]byte(reqBody.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	_, err = db.Exec(context.Background(), "UPDATE urls SET tag=$1,password=$2,not_found_url=$3,android_deep_link=$4,ios_deep_link=$5 WHERE id=$6", reqBody.Tag, hashedPsswd, reqBody.NotFoundUrl, reqBody.AndroidDeepLink, reqBody.IosDeepLink, uniqId)
 	if err != nil {
 		return "", err
 	}
