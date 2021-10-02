@@ -1,0 +1,43 @@
+$primary : #E415A3;
+$footer-background-color: #e415a32e;
+$footer-padding:1rem 1.5rem;
+
+@font-face {
+    font-family: 'Makinas-Scrap';
+    src: url("./fonts/Makinas-Scrap.otf");
+}
+
+/** variables **/
+$body-family : 'Makinas-Scrap';
+
+@import "~../node_modules/bulma/sass/base/_all.sass";
+@import "~../node_modules/bulma/sass/helpers/_all.sass";
+@import "~../node_modules/bulma/sass/components/navbar.sass";
+@import "~../node_modules/bulma/sass/utilities/_all.sass";
+@import "~../node_modules/bulma/sass/elements/title.sass";
+@import "~../node_modules/bulma/sass/elements/button.sass";
+@import "~../node_modules/bulma/sass/layout/footer.sass";
+@import "~../node_modules/bulma/sass/form/_all.sass";
+
+
+.app {
+    padding-top: 1.25rem;
+}
+@media (max-width:1023px) {
+    .app {
+        padding-top: 9.25rem;
+        margin-bottom: 9.25rem;
+    }
+}
+.footer {
+    position: fixed;
+    bottom: 0rem;
+    width: 100%;
+    padding-top: 1rem;
+}
+
+.login-form {
+    max-width: 480px;
+    display: block;
+    margin: 0 auto;
+}
