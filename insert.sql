@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION insertLongUrl(url TEXT,username VARCHAR) RETURNS VARCHAR AS $$
+CREATE OR REPLACE FUNCTION insertLongUrl(url TEXT,androidLink TEXT,iosLink TEXT,not_found_url TEXT, username VARCHAR,tag VARCHAR,psswd VARCHAR) RETURNS VARCHAR AS $$
        DECLARE
 	nextId INTEGER;
 	indexMapping TEXT[] := '{"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","0","1","2","3","4","5","6","7","8","9"}';
@@ -16,8 +16,9 @@ CREATE OR REPLACE FUNCTION insertLongUrl(url TEXT,username VARCHAR) RETURNS VARC
 			        end loop;
 				BEGIN
 					RAISE NOTICE '%',S;
-					INSERT INTO urls(id,url,username) VALUES(S,url,username);
+					INSERT INTO urls(id,url,username,tag,password,not_found_url,android_deep_link,ios_deep_link) VALUES(S,url,username,tag,psswd,not_found_url,androidLink,iosLink);
 					RETURN S;
+					
 				EXCEPTION WHEN unique_violation THEN
 			  		  -- do nothing
 				END;

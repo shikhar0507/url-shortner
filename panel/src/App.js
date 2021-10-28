@@ -1,4 +1,4 @@
-import React, { useState,useEffect } from 'react';
+import React, { useState,useEffect,useContext,createContext } from 'react';
 import {BrowserRouter as Router,
   Switch,
   Route,
@@ -8,81 +8,97 @@ import {BrowserRouter as Router,
 } from 'react-router-dom';
 import Navbar from './navbar';
 import {Login,Signup} from './Auth/'
-import Campaign from './Campaign';
 import Home from './Home';
 import './App.scss'
 
-const App = () => {
-  const [isAuthenticated,setAuth] = useState(false);
-  const history = useHistory()
 
-  useEffect(()=>{
-    fetch("http://localhost:8080/auth",{
-      method:'GET',
-      body:null,
-      credentials:"include",
-    }).then(res=>{
-      if(res.ok) {
-        return res.json()
-      }
-    }).then(response=>{
-      setAuth(response.Authenticated)
-    }).catch(err=>{
-      console.error(err)
-    })
-  },[])
+const authContext = createContext(null)
 
-  const handleLogout = () => {
-    console.log("logout")
+const useAuth = () => {
+  return useContext(authContext)
+}
 
-    fetch("http://localhost:8080/logout",{
-      body:null,
-      headers:{
-        'Content-Type':'application/json'
-      },
-      credentials:"include",
-      method:"DELETE"
-    }).then(res=>{
-      if(res.ok) return res.json()
-    }).then(()=>{
-      setAuth(false)
-      history.push("/")
-    }).catch(err=>{
-      console.error(err)
-    })
-    
-  }
-
-  const onLoginSuccess = (his)  => {
-    setAuth(true)
-  }
-
+const ProvideAuth = ({children}) => {
+  const auth = useProvideAuth();
+  console.log(auth)
   return (
-    <div>
+    <authContext.Provider value={auth}>
+      {children}
+    </authContext.Provider>
+  )
+}
+
+const useProvideAuth = () =>{
+  const [user,setUser] = useState(false);
+  const [isLoading,setIsLoading] = useState(true)
+  const fetchAuth = async () => {
+    try {
+      const authResponse = await fetch("http://localhost:8080/auth",{
+        method:'GET',
+        body:null,
+        credentials:"include",
+      })
+      const authState = await authResponse.json()
+      return authState
+    }catch(e){
+     return e
+    }
+  }
+  fetchAuth().then(authState=>{
+    console.log(authState)
+    setUser(authState.Authenticated)
+    setIsLoading(false)
+  }).catch(console.error)
+  console.log(user)
+  return {
+    user,
+    setUser,
+    isLoading
+  }
+}
+
+const App = () => {
+  return (
+  <ProvideAuth>
     <Router>
-      <Navbar isAuthenticated={isAuthenticated} handleLogout={handleLogout}></Navbar>
+      <Navbar></Navbar>
       <div className="app">
         <Switch>
-          <Route path="/login">
-            {isAuthenticated ? <Home></Home> : <Login handleLogin={onLoginSuccess}></Login>}
-          </Route>
-          <Route path="/signup">
-          {isAuthenticated ? <Home></Home> : <Signup></Signup>}
-          </Route>
-          <Route path="/campaign">
-            {isAuthenticated ? <Campaign></Campaign> : <Redirect to="/login"></Redirect> }
-          </Route>
-          <Route path="/">
-            <Home auth={isAuthenticated}></Home>
-          </Route>
+          <PublicRoute path="/login">
+            <Login></Login>
+          </PublicRoute>
+          <PublicRoute path="/signup">
+            <Signup></Signup>
+          </PublicRoute>
+          <PrivateRoute path="/">
+           <Home></Home>
+          </PrivateRoute>
         </Switch>
       </div>
     </Router>
-    </div>
+</ProvideAuth>
   )
 }
 
 
+const PrivateRoute = ({children,...rest}) => {
+ const {user,isLoading} = useAuth()
+ return (
+
+   <Route {...rest}>
+    {isLoading ? (<div>Loading...</div>) : user ? (children) : (<Redirect to="/login"></Redirect>)}
+   </Route>
+ )
+}
+
+const PublicRoute = ({children,...rest}) => {
+  const {user} = useAuth()
+  return (
+    <Route {...rest}>
+      {user ? (<Redirect to="/"></Redirect>) : (children)}
+    </Route>
+  )
+}
 
 const CampaginLink = () => {
   return (
@@ -96,5 +112,5 @@ const CampaginLink = () => {
 
 
 // export default App;
-export {App,CampaginLink}
+export {App,CampaginLink,useAuth}
 

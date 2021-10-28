@@ -263,10 +263,12 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 }
 
 func addExpiration(reqBody LinkAdd, shortId string) error {
-	timeT, err := time.Parse("Mon Jan 02 2006 15:04:05 MST-0700", reqBody.Expiration.Time)
+
+	timeT, err := time.Parse("2006-01-02T15:04:05.000Z", reqBody.Expiration.Time)
 	if err != nil {
 		return err
 	}
+	fmt.Println(timeT.UTC())
 	expUrl := reqBody.Expiration.ExpirationUrl
 	if expUrl == "" {
 		expUrl = "http://localhost:8080"
@@ -437,12 +439,14 @@ func main() {
 
 func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 	link, err := getRedirectUrl(id)
-
+	fmt.Println(link.data.Expiration.Time)
 	switch err {
 	case nil:
-		expTime, _ := time.Parse("Mon Jan 02 2006 15:04:05 MST-0700", link.data.Expiration.Time)
+		expTime, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", link.data.Expiration.Time)
+		fmt.Println("exp time", expTime.String())
 		isAfter := link.data.Expiration.Time != "" && time.Now().After(expTime)
 		redirectUrl := link.data.LongUrl
+		fmt.Println("password", link.data.Password)
 		if link.data.Password != "" {
 			temp := template.Must(template.ParseFiles("views/authentication.html"))
 			su := map[string]string{
@@ -454,7 +458,15 @@ func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 		if isAfter {
 			redirectUrl = link.data.Expiration.ExpirationUrl
 		}
+		fmt.Println("check if website exist")
 
+		conn, err := net.DialTimeout("tcp", "instagram.fdel1-5.fna.fbcdn.net:https", time.Second*5)
+		if err != nil {
+			fmt.Println(err)
+			http.Redirect(w, r, link.data.NotFoundUrl, 301)
+			return
+		}
+		defer conn.Close()
 		http.Redirect(w, r, redirectUrl, http.StatusPermanentRedirect)
 		if link.username != "" {
 			go updateLogs(r, link)
@@ -523,7 +535,9 @@ func getRedirectUrl(path string) (storedUrl, error) {
 
 func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, error) {
 	psswdHash := reqBody.Password
+
 	if psswdHash != "" {
+		fmt.Println("psswd", psswdHash)
 		hash, err := auth.GeneratePsswdHash(reqBody.Password)
 		if err != nil {
 			return "", err
@@ -532,18 +546,11 @@ func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, erro
 	}
 
 	var uniqId string
+	fmt.Println(reqBody)
 
-	err := db.QueryRow(context.Background(), "SELECT insertLongUrl($1,$2)", reqBody.LongUrl, session.Username).Scan(&uniqId)
+	err := db.QueryRow(context.Background(), "SELECT insertLongUrl($1,$2,$3,$4,$5,$6,$7)", reqBody.LongUrl, reqBody.AndroidDeepLink, reqBody.IosDeepLink, reqBody.NotFoundUrl, session.Username, reqBody.Tag, psswdHash).Scan(&uniqId)
 	if err != nil {
-		return "", err
-	}
-
-	hashedPsswd, err := bcrypt.GenerateFromPassword([]byte(reqBody.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	_, err = db.Exec(context.Background(), "UPDATE urls SET tag=$1,password=$2,not_found_url=$3,android_deep_link=$4,ios_deep_link=$5 WHERE id=$6", reqBody.Tag, hashedPsswd, reqBody.NotFoundUrl, reqBody.AndroidDeepLink, reqBody.IosDeepLink, uniqId)
-	if err != nil {
+		fmt.Println(err)
 		return "", err
 	}
 

@@ -1,60 +1,76 @@
 import React,{useState} from 'react';
-import {CampaginLink} from '../App';
+import {CampaginLink, useAuth} from '../App';
 require('./index.scss');
 
 
 const Home = (props) => {
-
+    const auth = useAuth()
     return (
         <div className="home">
                 <div className="home-url">
                     <URLShortner></URLShortner>
-                    {!props.isAuthenticated ? <CampaginLink></CampaginLink> : ''}
+                    {!auth.user ? <CampaginLink></CampaginLink> : ''}
                 </div>
-                {props.isAuthenticated ? 
-                    <div className="dashboard">
-                       <nav className="level">
-                           <div className="level-item has-text-centered">
-                               <div>
-                                   <p className="heading">Total clicks</p>
-                                   <p className="title"></p>
-                               </div>
-                           </div>
-                           <div className="level-item has-text-centered">
-                               <div>
-                                   <p className="heading">Most popular campaign</p>
-                                   <p className="title"></p>
-                               </div>
-                           </div>
-                           <div className="level-item has-text-centered">
-                               <div>
-                                   <p className="heading">Most used device</p>
-                                   
-                               </div>
-                           </div>
-                       </nav>
-                    </div>
-                : ''}
             </div>
     )
     
 }
 
+
 const URLShortner = () => {
-    const [inputUrl,setInputUrl] = useState(null)
-    const handleUrl = (e) => {
-        setInputUrl(e.target.value)
+    const [linkAttrs,setLinkAttrs] = useState({
+        longUrl:'',
+        androidDeepLink:'',
+        iosDeepLink:'',
+        expiration:{
+            time:new Date(),
+            expirationUrl:'https://www.youtube.com/watch?v=yydZbVoCbn0'
+        },
+        notFoundUrl:'',
+        password:'',
+        tag:''
+    })
+    const handleInputUrl = (e) => {
+        linkAttrs.longUrl = e.target.value
+        setLinkAttrs(linkAttrs)
     }
+    const handleAndroidLink = (e) => {
+        linkAttrs.androidLink = e.target.value
+        setLinkAttrs(linkAttrs)
+    }
+    const handleIosLink = (e) => {
+        linkAttrs.iosLink = e.target.value
+        setLinkAttrs(linkAttrs)
+    }
+    const handle404= (e) => {
+        linkAttrs.notFoundUrl = e.target.value
+        setLinkAttrs(linkAttrs)
+    }
+    const handlePassword = (e) => {
+        linkAttrs.password = e.target.value
+        setLinkAttrs(linkAttrs)
+    }
+    const handleExpirationDate = (e) => {
+        console.log("expiration",new Date(e.target.value))
+        linkAttrs.expiration.time = new Date(e.target.value)
+        setLinkAttrs(linkAttrs)
+    }
+    const handleTag = (e) => {
+        linkAttrs.tag = e.target.value;
+        setLinkAttrs(linkAttrs)
+    }
+
+
     const [shortenUrl,setShortenUrl] = useState(null)
     const [error,setError] = useState('');
     const [active,setActive] = useState(false);
     
     const createLink = () => {
-        if(!inputUrl) {
+        console.log("asd")
+        if(!linkAttrs.longUrl) {
             setError({error:'Enter url'})
             return
         }
-
         setActive(true)
         setError('')
         fetch("http://localhost:8080/links/",{
@@ -63,7 +79,7 @@ const URLShortner = () => {
                 'Content-Type':'application/json'
             },
             credentials:"include",
-            body:JSON.stringify({longUrl:inputUrl,tag:'Work',notFoundUrl:'https://google.com',password:'xanadu'})
+            body:JSON.stringify(linkAttrs)
         }).then(res=>{
             return res.json()
         }).then(response=>{
@@ -77,13 +93,43 @@ const URLShortner = () => {
                 <div className="is-size-4 has-text-weight-semibold">Shorten link</div>
                 <div className="field mt-2">
                     <div className="control">
-                        <input className="input" placeholder="Enter url" onChange={handleUrl} required></input>
+                        <input className="input" placeholder="Enter url" onChange={handleInputUrl} required></input>
                         <button className={"button is-primary ml-2"+(active ?'is-loading' :'')} onClick={createLink}>Submit</button>
                     </div>
                     {error ? <div className="error has-danger-text mt-1">{error}</div> :''}
                 </div>
+                <div className="mt-2">
+                    <div className="columns">
+                        <div className="column">
+                            <div className="field">
+                                <label className="label">Tag</label>
+                                <div className="control">
+                                    <input className="input" type="" placeholder="link tag" onChange={handleTag}></input>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="column">
+                            <div className="field">
+                                <label className="label">Expiration</label>
+                                <div className="control">
+                                    <input className="input" type="datetime-local" placeholder="Expiration Time" onChange={handleExpirationDate}></input>
+                                </div>
+                                <p class="help">Accessing this link after the expiration will redirect user to <i>404 page</i> to our website</p>
+                            </div>
+                        </div>
+                        <div className="column">
+                            <div className="field">
+                                <label className="label">Not found url</label>
+                                <div className="control">
+                                    <input className="input" type="text" placeholder="Fallback url" onChange={handle404}></input>
+                                </div>
+                                <p class="help">If requested url is unavailable , then user will be redirected to this page</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div className="result mt-2 is-success">
-                    <a className="title has-text-success is-5" href={shortenUrl}>
+                    <a className="title has-text-success is-5" href={shortenUrl} target="_blank">
                         {shortenUrl}
                     </a>
                 </div>

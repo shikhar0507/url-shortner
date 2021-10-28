@@ -1,9 +1,10 @@
 import React from 'react';
 import { useState } from 'react';
 import {useHistory} from 'react-router-dom';
+import { useAuth } from '../App';
 
 const Login = (props) => {
-  const history = useHistory()
+  const {setUser} = useAuth()
   const [username,setUsername] = useState('')
   const [password,setPassword] = useState('')
   const [error,setError] = useState('')
@@ -37,9 +38,7 @@ const Login = (props) => {
         setActive(false)
         return
       }    
-
-      props.handleLogin()
-        
+      setUser(true)
     }).catch(error=>{
       setError(error.message)
       setActive(false)
