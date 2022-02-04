@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,7 +16,10 @@ import (
 	"url-shortner/auth"
 	"url-shortner/utils"
 
+	"url-shortner/props"
+
 	"github.com/avct/uasurfer"
+	"github.com/gocolly/colly"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgtype"
 	pgtypeuuid "github.com/jackc/pgtype/ext/gofrs-uuid"
@@ -33,19 +38,46 @@ type Api struct {
 
 type Links struct {
 }
-type Expiration struct {
-	Time          string `json:time`
-	ExpirationUrl string `json:expirationUrl`
-	id            string `json: id`
+type Campaign struct {
+	Name    string `json:"name"`
+	Medium  string `json:"medium"`
+	Source  string `json:"source"`
+	Term    string `json:"term"`
+	Content string `json:"content"`
+	Id      string `json:"id"`
+}
+type country_redirect struct {
+	id           string
+	Country_code string `json:"country_code"`
+	Country_url  string `json:"country_url"`
 }
 type LinkAdd struct {
-	LongUrl         string     `json: longUrl`
-	Expiration      Expiration `json:expiration`
-	Tag             string     `json:tag`
-	Password        string     `json:psswd`
-	NotFoundUrl     string     `json: 404_page`
-	AndroidDeepLink string     `json: android_deep_link`
-	IosDeepLink     string     `json: ios_deep_link`
+	LongUrl          string             `json:"longUrl"`
+	Expiration       string             `json:"expiration"`
+	Tag              string             `json:"tag"`
+	Password         string             `json:"psswd"`
+	NotFoundUrl      string             `json:"not_found_url"`
+	AndroidDeepLink  string             `json:"android_deep_link"`
+	IosDeepLink      string             `json:"ios_deep_link"`
+	Name             string             `json:"name"`
+	Description      string             `json:"description"`
+	Campaign         Campaign           `json:"campaign"`
+	HTTPStatus       int                `json:"http_status"`
+	PlayStoreLink    string             `json:"play_store_link"`
+	Qrcode           bool               `json:"qr_code"`
+	Country_block    []string           `json:"country_block"`
+	Country_redirect []country_redirect `json:"country_redirect"`
+	Mobile_url       string             `json:"mobile_url"`
+	Destkop_url      string             `json:"desktop_url"`
+	Others_url       string             `json:"others_url"`
+}
+
+type LinkAddResponse struct {
+	ShortUrl string `json:"shortUrl"`
+}
+
+func (l *LinkAdd) Value() (driver.Value, error) {
+	return json.Marshal(l)
 }
 
 type storedUrl struct {
@@ -135,6 +167,11 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if head == "opengraph" {
+		parseRequest := colly.NewCollector(colly.AllowURLRevisit())
+		websiteRequest(w, r, parseRequest)
+		return
+	}
 	// request to /link/<id>
 	switch r.Method {
 	case http.MethodOptions:
@@ -148,6 +185,152 @@ func (link Links) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		utils.SendResponse(w, http.StatusMethodNotAllowed, utils.SendErrorToClient("Method not supported"))
 	}
+
+}
+func websiteRequest(w http.ResponseWriter, r *http.Request, parseRequest *colly.Collector) {
+	fmt.Println("request")
+	allowed := false
+	switch r.Method {
+	case "options":
+		return
+	case "POST":
+		allowed = true
+	default:
+		utils.SendResponse(w, http.StatusMethodNotAllowed, utils.SendErrorToClient("Method not allowed"))
+	}
+	if !allowed {
+		return
+	}
+	var request props.OpenGraphReq
+	result := requestJSON.Decode(w, r, &request)
+
+	if result.Status != 200 {
+		utils.SendResponse(w, result.Status, utils.SendErrorToClient(result.Message))
+		return
+	}
+
+	var basic props.Basic
+	imageHash := make(map[string]props.Image)
+	videoHash := make(map[string]props.Video)
+	audioHash := make(map[string]props.Audio)
+	type types struct {
+		currentImage props.Image
+		currentVideo props.Video
+		currentMusic props.Music
+		currentAudio props.Audio
+	}
+	ty := types{}
+
+	parseRequest.OnHTML("meta", func(e *colly.HTMLElement) {
+		prop := e.Attr("property")
+		value := e.Attr("content")
+		switch prop {
+		case "og:title":
+			basic.Title = value
+		case "og:type":
+			basic.Type = value
+		case "og:image":
+			currImage, ok := imageHash[value]
+			img := props.Image{Url: value}
+			if ok {
+				ty.currentImage = currImage
+			} else {
+				imageHash[value] = img
+				ty.currentImage = img
+			}
+		case "og:image:width":
+			ty.currentImage.Width = value
+			imageHash[ty.currentImage.Url] = ty.currentImage
+		case "og:image:height":
+			ty.currentImage.Height = value
+			imageHash[ty.currentImage.Url] = ty.currentImage
+		case "og:image:alt":
+			ty.currentImage.Alt = value
+			imageHash[ty.currentImage.Url] = ty.currentImage
+		case "og:image:type":
+			ty.currentImage.Type = value
+			imageHash[ty.currentImage.Url] = ty.currentImage
+		case "og:image:secure_url":
+			ty.currentImage.Secure_url = value
+			imageHash[ty.currentImage.Url] = ty.currentImage
+		case "og:url":
+			basic.Url = value
+		case "og:description":
+			basic.Description = value
+		case "og:site_name":
+			basic.SiteName = value
+		case "og:determiner":
+			basic.Determiner = value
+		case "og:video":
+			vid := props.Video{Url: value}
+			currVideo, ok := videoHash[value]
+			if ok {
+				ty.currentVideo = currVideo
+			} else {
+				videoHash[value] = vid
+				ty.currentVideo = vid
+			}
+		case "og:video:secure_url":
+			ty.currentVideo.Secure_url = value
+			videoHash[ty.currentVideo.Url] = ty.currentVideo
+		case "og:video:type":
+			ty.currentVideo.Type = value
+			videoHash[ty.currentVideo.Url] = ty.currentVideo
+		case "og:video:width":
+			ty.currentVideo.Width = value
+			videoHash[ty.currentVideo.Url] = ty.currentVideo
+		case "og:video:height":
+			ty.currentVideo.Height = value
+			videoHash[ty.currentVideo.Url] = ty.currentVideo
+		case "og:audio":
+			aud := props.Audio{Url: value}
+			currAudio, ok := audioHash[value]
+			if ok {
+				ty.currentAudio = currAudio
+			} else {
+				audioHash[value] = aud
+				ty.currentAudio = aud
+			}
+		case "og:audio:secure_url":
+			ty.currentAudio.Secure_url = value
+			audioHash[ty.currentAudio.Url] = ty.currentAudio
+		case "og:audio:type":
+			ty.currentAudio.Type = value
+			audioHash[ty.currentAudio.Url] = ty.currentAudio
+		case "og:locale":
+			if basic.Locale != "" {
+				basic.Locales = append(basic.Locales, value)
+			} else {
+				basic.Locale = value
+			}
+		}
+
+	})
+	parseRequest.OnError(func(r *colly.Response, e error) {
+		fmt.Println(e, string(r.Body))
+	})
+
+	parseRequest.OnRequest(func(collyReq *colly.Request) {
+
+		fmt.Println("visiting", collyReq.URL.String())
+	})
+	parseRequest.OnResponse(func(collyResp *colly.Response) {
+		fmt.Println("parsing response", collyResp.StatusCode)
+	})
+	parseRequest.OnScraped(func(re *colly.Response) {
+		fmt.Println("parsed", re.StatusCode)
+		for _, v := range imageHash {
+			basic.Image = append(basic.Image, v)
+		}
+		for _, v := range videoHash {
+			basic.Video = append(basic.Video, v)
+		}
+		for _, v := range audioHash {
+			basic.Audio = append(basic.Audio, v)
+		}
+		utils.SendResponse(w, http.StatusOK, basic)
+	})
+	parseRequest.Visit(request.Url)
 
 }
 
@@ -216,7 +399,7 @@ func validateLinkPassword(w http.ResponseWriter, r *http.Request) {
 		if username.Status != pgtype.Null {
 			go updateLogs(r, link)
 		}
-		http.Redirect(w, r, url, http.StatusPermanentRedirect)
+		http.Redirect(w, r, url, http.StatusSeeOther)
 	case pgx.ErrNoRows:
 		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("The requested link is not found or is expired"))
 	default:
@@ -240,10 +423,11 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 
 	shortId, insErr := setId(r, reqBody, session)
 	if insErr != nil {
+		fmt.Println(insErr)
 		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
-	if reqBody.Expiration.Time != "" {
+	if reqBody.Expiration != "" {
 		err := addExpiration(reqBody, shortId)
 		if err != nil {
 			var parseErr *time.ParseError
@@ -259,17 +443,19 @@ func (link Links) Add(w http.ResponseWriter, r *http.Request, session auth.Sessi
 			return
 		}
 	}
-	utils.SendResponse(w, http.StatusOK, &LinkAdd{LongUrl: "http://localhost:8080/" + shortId, Password: reqBody.Password})
+	fmt.Println(shortId)
+	utils.SendResponse(w, http.StatusOK, &LinkAddResponse{ShortUrl: "http://localhost:8080/" + shortId})
 }
 
 func addExpiration(reqBody LinkAdd, shortId string) error {
 
-	timeT, err := time.Parse("2006-01-02T15:04:05.000Z", reqBody.Expiration.Time)
+	timeT, err := time.Parse("2006-01-02T15:04", reqBody.Expiration)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 	fmt.Println(timeT.UTC())
-	expUrl := reqBody.Expiration.ExpirationUrl
+	expUrl := reqBody.NotFoundUrl
 	if expUrl == "" {
 		expUrl = "http://localhost:8080"
 	}
@@ -439,12 +625,12 @@ func main() {
 
 func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 	link, err := getRedirectUrl(id)
-	fmt.Println(link.data.Expiration.Time)
 	switch err {
 	case nil:
-		expTime, _ := time.Parse("2006-01-02 15:04:05 -0700 MST", link.data.Expiration.Time)
+		fmt.Println("og time", link.data.Expiration)
+		expTime, _ := time.Parse("2006-01-02 15:04", link.data.Expiration)
 		fmt.Println("exp time", expTime.String())
-		isAfter := link.data.Expiration.Time != "" && time.Now().After(expTime)
+		isAfter := link.data.Expiration != "" && time.Now().After(expTime)
 		redirectUrl := link.data.LongUrl
 		fmt.Println("password", link.data.Password)
 		if link.data.Password != "" {
@@ -456,7 +642,7 @@ func handleRedirect(w http.ResponseWriter, r *http.Request, id string) {
 			break
 		}
 		if isAfter {
-			redirectUrl = link.data.Expiration.ExpirationUrl
+			redirectUrl = link.data.NotFoundUrl
 		}
 		fmt.Println("check if website exist")
 
@@ -511,22 +697,18 @@ func updateLogs(r *http.Request, result storedUrl) {
 func getRedirectUrl(path string) (storedUrl, error) {
 	var su storedUrl
 	var id, username, psswd pgtype.Varchar
-	var longUrl, notFoundUrl, exp_url pgtype.Text
+	var longUrl, notFoundUrl pgtype.Text
 	var exp_time pgtype.Timestamptz
-	err := db.QueryRow(context.Background(), "select urls.id,urls.url,urls.username,urls.password,urls.not_found_url,expiration,expired_url from urls left join expiration on urls.id=expiration.id where urls.id=$1", path).Scan(&id, &longUrl, &username, &psswd, &notFoundUrl, &exp_time, &exp_url)
+	err := db.QueryRow(context.Background(), "select urls.id,urls.url,urls.username,urls.password,urls.not_found_url,expiration from urls left join expiration on urls.id=expiration.id where urls.id=$1", path).Scan(&id, &longUrl, &username, &psswd, &notFoundUrl, &exp_time)
 
 	fmt.Println(id)
 
 	if err != nil {
 		return su, err
-
 	}
-	exp := Expiration{}
+	var exp string
 	if exp_time.Status != pgtype.Null {
-		exp.Time = exp_time.Time.String()
-	}
-	if exp_url.Status != pgtype.Null {
-		exp.ExpirationUrl = exp_url.String
+		exp = exp_time.Time.String()
 	}
 
 	link := LinkAdd{LongUrl: longUrl.String, Password: psswd.String, NotFoundUrl: notFoundUrl.String, Expiration: exp}
@@ -546,9 +728,8 @@ func setId(r *http.Request, reqBody LinkAdd, session auth.Session) (string, erro
 	}
 
 	var uniqId string
-	fmt.Println(reqBody)
 
-	err := db.QueryRow(context.Background(), "SELECT insertLongUrl($1,$2,$3,$4,$5,$6,$7)", reqBody.LongUrl, reqBody.AndroidDeepLink, reqBody.IosDeepLink, reqBody.NotFoundUrl, session.Username, reqBody.Tag, psswdHash).Scan(&uniqId)
+	err := db.QueryRow(context.Background(), "SELECT insertLongUrl($1,$2,$3)", session.Username, psswdHash, reqBody).Scan(&uniqId)
 	if err != nil {
 		fmt.Println(err)
 		return "", err

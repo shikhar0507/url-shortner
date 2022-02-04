@@ -1,0 +1,18 @@
+[09:59:24.636] Global cache location '/home/xanadu/.cache/typescript/4.5', safe file path '/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/typingSafeList.json', types map path /home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/typesMap.json
+[09:59:24.640] Processing cache location '/home/xanadu/.cache/typescript/4.5'
+[09:59:24.640] Trying to find '/home/xanadu/.cache/typescript/4.5/package.json'...
+[09:59:24.641] Finished processing cache location '/home/xanadu/.cache/typescript/4.5'
+[09:59:24.641] Process id: 7765
+[09:59:24.641] NPM location: /usr/bin/npm (explicit '--npmLocation' not  provided)
+[09:59:24.641] validateDefaultNpmLocation: false
+[09:59:24.641] Npm config file: /home/xanadu/.cache/typescript/4.5/package.json
+[09:59:24.641] Npm config file: '/home/xanadu/.cache/typescript/4.5/package.json' is missing, creating new one...
+[09:59:24.642] Updating types-registry npm package...
+[09:59:24.642] Exec: /usr/bin/npm install --ignore-scripts types-registry@latest
+[09:59:25.735]     Succeeded. stdout:
+    
+    added 1 package, and audited 2 packages in 948ms
+
+found 0 vulnerabilities
+
+[09:59:25.735] Updated types-registry npm package

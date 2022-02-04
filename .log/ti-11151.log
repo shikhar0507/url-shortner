@@ -1,0 +1,41 @@
+[14:05:30.387] Global cache location '/home/xanadu/.cache/typescript/4.5', safe file path '/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/typingSafeList.json', types map path /home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/typesMap.json
+[14:05:30.391] Processing cache location '/home/xanadu/.cache/typescript/4.5'
+[14:05:30.391] Trying to find '/home/xanadu/.cache/typescript/4.5/package.json'...
+[14:05:30.452] Loaded content of '/home/xanadu/.cache/typescript/4.5/package.json': {"private":true,"dependencies":{"types-registry":"^0.1.574"},"devDependencies":{"@types/history":"^4.7.9","@types/object-assign":"^4.0.30","@types/prop-types":"^15.7.4","@types/react":"^17.0.38","@types/react-router":"^5.1.17","@types/react-router-dom":"^5.3.2"}}
+[14:05:30.452] Loaded content of '/home/xanadu/.cache/typescript/4.5/package-lock.json'
+[14:05:30.482] Adding entry into typings cache: 'history' => '/home/xanadu/.cache/typescript/4.5/node_modules/@types/history/index.d.ts'
+[14:05:30.496] Adding entry into typings cache: 'object-assign' => '/home/xanadu/.cache/typescript/4.5/node_modules/@types/object-assign/index.d.ts'
+[14:05:30.498] Adding entry into typings cache: 'prop-types' => '/home/xanadu/.cache/typescript/4.5/node_modules/@types/prop-types/index.d.ts'
+[14:05:30.505] Adding entry into typings cache: 'react' => '/home/xanadu/.cache/typescript/4.5/node_modules/@types/react/index.d.ts'
+[14:05:30.522] Adding entry into typings cache: 'react-router' => '/home/xanadu/.cache/typescript/4.5/node_modules/@types/react-router/index.d.ts'
+[14:05:30.525] Adding entry into typings cache: 'react-router-dom' => '/home/xanadu/.cache/typescript/4.5/node_modules/@types/react-router-dom/index.d.ts'
+[14:05:30.525] Finished processing cache location '/home/xanadu/.cache/typescript/4.5'
+[14:05:30.525] Process id: 11162
+[14:05:30.525] NPM location: /usr/bin/npm (explicit '--npmLocation' not  provided)
+[14:05:30.525] validateDefaultNpmLocation: false
+[14:05:30.526] Npm config file: /home/xanadu/.cache/typescript/4.5/package.json
+[14:05:30.526] Updating types-registry npm package...
+[14:05:30.526] Exec: /usr/bin/npm install --ignore-scripts types-registry@latest
+[14:05:32.794]     Succeeded. stdout:
+    
+    up to date, audited 10 packages in 2s
+
+found 0 vulnerabilities
+
+[14:05:32.794] Updated types-registry npm package
+[14:05:37.495] Got install request {"projectName":"/dev/null/inferredProject1*","fileNames":["/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es5.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2016.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.dom.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.dom.iterable.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.webworker.importscripts.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.scripthost.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.core.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.collection.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.generator.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.iterable.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.promise.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.proxy.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.reflect.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.symbol.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2015.symbol.wellknown.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2016.array.include.d.ts","/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/lib.es2016.full.d.ts","/home/xanadu/url-shortner/panel/src/linkcreate/index.js"],"compilerOptions":{"module":1,"target":3,"jsx":1,"allowJs":true,"allowSyntheticDefaultImports":true,"allowNonTsExtensions":true,"noEmitForJsFiles":true,"maxNodeModuleJsDepth":2},"typeAcquisition":{"enable":true,"include":[],"exclude":[]},"unresolvedImports":[],"projectRootPath":"/home/xanadu/url-shortner/panel/src/linkcreate","kind":"discover"}
+[14:05:37.518] Loaded safelist from types map file '/home/xanadu/.emacs.d/.cache/lsp/npm/typescript/lib/node_modules/typescript/lib/typesMap.json'
+[14:05:37.519] Explicitly included types: []
+[14:05:37.519] Inferred typings from unresolved imports: []
+[14:05:37.519] Result: {"cachedTypingPaths":[],"newTypingNames":[],"filesToWatch":["/home/xanadu/url-shortner/panel/src/linkcreate/bower_components","/home/xanadu/url-shortner/panel/src/linkcreate/node_modules"]}
+[14:05:37.519] Finished typings discovery: {"cachedTypingPaths":[],"newTypingNames":[],"filesToWatch":["/home/xanadu/url-shortner/panel/src/linkcreate/bower_components","/home/xanadu/url-shortner/panel/src/linkcreate/node_modules"]}
+[14:05:37.520] DirectoryWatcher:: Added:: WatchInfo: /home/xanadu/url-shortner/panel/src/linkcreate/bower_components
+[14:05:37.520] DirectoryWatcher:: Added:: WatchInfo: /home/xanadu/url-shortner/panel/src/linkcreate/bower_components 1 undefined Project: /dev/null/inferredProject1* watcher already invoked: false
+[14:05:37.522] Elapsed:: 1.6026220005005598ms DirectoryWatcher:: Added:: WatchInfo: /home/xanadu/url-shortner/panel/src/linkcreate/bower_components 1 undefined Project: /dev/null/inferredProject1* watcher already invoked: false
+[14:05:37.522] DirectoryWatcher:: Added:: WatchInfo: /home/xanadu/url-shortner/panel/src/linkcreate/node_modules
+[14:05:37.522] DirectoryWatcher:: Added:: WatchInfo: /home/xanadu/url-shortner/panel/src/linkcreate/node_modules 1 undefined Project: /dev/null/inferredProject1* watcher already invoked: false
+[14:05:37.522] Elapsed:: 0.1150329988449812ms DirectoryWatcher:: Added:: WatchInfo: /home/xanadu/url-shortner/panel/src/linkcreate/node_modules 1 undefined Project: /dev/null/inferredProject1* watcher already invoked: false
+[14:05:37.522] Sending response:
+    {"projectName":"/dev/null/inferredProject1*","typeAcquisition":{"enable":true,"include":[],"exclude":[]},"compilerOptions":{"module":1,"target":3,"jsx":1,"allowJs":true,"allowSyntheticDefaultImports":true,"allowNonTsExtensions":true,"noEmitForJsFiles":true,"maxNodeModuleJsDepth":2},"typings":[],"unresolvedImports":[],"kind":"action::set"}
+[14:05:37.523] Response has been sent.
+[14:05:37.523] No new typings were requested as a result of typings discovery

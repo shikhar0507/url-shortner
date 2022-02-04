@@ -7,9 +7,11 @@ import {BrowserRouter as Router,
   Link
 } from 'react-router-dom';
 import Navbar from './navbar';
+import Sidebar from './sidebar';
 import {Login,Signup} from './Auth/'
 import Home from './Home';
 import './App.scss'
+import LinkCreate from './linkcreate';
 
 
 const authContext = createContext(null)
@@ -20,10 +22,9 @@ const useAuth = () => {
 
 const ProvideAuth = ({children}) => {
   const auth = useProvideAuth();
-  console.log(auth)
   return (
     <authContext.Provider value={auth}>
-      {children}
+      {auth.isLoading ? (<div>Loading...</div>) : (children)}
     </authContext.Provider>
   )
 }
@@ -44,12 +45,14 @@ const useProvideAuth = () =>{
      return e
     }
   }
-  fetchAuth().then(authState=>{
-    console.log(authState)
-    setUser(authState.Authenticated)
-    setIsLoading(false)
-  }).catch(console.error)
-  console.log(user)
+  useEffect(()=>{
+    console.log('sending auth request...')
+    fetchAuth().then(authState=>{
+        setUser(authState.Authenticated)
+        setIsLoading(false)
+    }).catch(console.error)
+  },[])
+
   return {
     user,
     setUser,
@@ -58,11 +61,21 @@ const useProvideAuth = () =>{
 }
 
 const App = () => {
+    console.log('app')
+    const [openMenu,setOpenMenu] = useState(false)
+    useEffect(()=>{
+	console.log("menu changed",openMenu)
+
+    },[openMenu])
   return (
   <ProvideAuth>
+  
     <Router>
-      <Navbar></Navbar>
-      <div className="app">
+	  <Navbar setOpen={setOpenMenu} isOpen={openMenu}></Navbar>
+	  <Sidebar isOpen={openMenu} setOpen={setOpenMenu}></Sidebar>
+	  <div className="app">
+	  {openMenu &&  <div className="backdrop-root" onClick={()=>setOpenMenu(false)}> </div> }
+       <div className="content-column container">
         <Switch>
           <PublicRoute path="/login">
             <Login></Login>
@@ -70,10 +83,14 @@ const App = () => {
           <PublicRoute path="/signup">
             <Signup></Signup>
           </PublicRoute>
+          <PublicRoute path="/create-link">
+            <LinkCreate></LinkCreate>
+          </PublicRoute>
           <PrivateRoute path="/">
            <Home></Home>
           </PrivateRoute>
         </Switch>
+        </div>
       </div>
     </Router>
 </ProvideAuth>
@@ -92,10 +109,12 @@ const PrivateRoute = ({children,...rest}) => {
 }
 
 const PublicRoute = ({children,...rest}) => {
-  const {user} = useAuth()
+  const {user,isLoading} = useAuth()
+  const {path} = {...rest}
   return (
     <Route {...rest}>
-      {user ? (<Redirect to="/"></Redirect>) : (children)}
+
+      {isLoading ? (<div>Loading...</div>) : path === "/create-link" ? (children) : user ? (<Redirect to="/"></Redirect>) : (children)}
     </Route>
   )
 }

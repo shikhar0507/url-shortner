@@ -1,0 +1,37 @@
+@import "bulma/sass/components/tabs.sass";
+@import "bulma/sass/utilities/controls.sass";
+@import "bulma/sass/utilities/extends.sass";
+@import "bulma/sass/elements/box.sass";
+@import "bulma/sass/elements/tag.sass";
+@import "bulma/sass/elements/other.sass";
+
+
+.url-card {
+    padding:16px
+}
+.http-control 
+    .radio {
+        padding: 8px 8px 8px 0px;
+    }
+
+.http-control 
+    .radio:nth-child(1) {
+        margin-left: 0.5em;
+    }
+
+.social {
+    // max-width: 360px;
+    
+    .image 
+        img {
+            width: 100%;
+        }
+    .social-description {
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+}
+.twitter-social {
+    border-radius: 1rem;
+}

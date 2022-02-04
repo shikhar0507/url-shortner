@@ -2,14 +2,6 @@ $primary : #E415A3;
 $footer-background-color: #e415a32e;
 $footer-padding:1rem 1.5rem;
 
-@font-face {
-    font-family: 'Makinas-Scrap';
-    src: url("./fonts/Makinas-Scrap.otf");
-}
-
-/** variables **/
-$body-family : 'Makinas-Scrap';
-
 @import "~../node_modules/bulma/sass/base/_all.sass";
 @import "~../node_modules/bulma/sass/helpers/_all.sass";
 @import "~../node_modules/bulma/sass/components/navbar.sass";
@@ -17,27 +9,46 @@ $body-family : 'Makinas-Scrap';
 @import "~../node_modules/bulma/sass/elements/title.sass";
 @import "~../node_modules/bulma/sass/elements/button.sass";
 @import "~../node_modules/bulma/sass/layout/footer.sass";
+@import "~../node_modules/bulma/sass/elements/container.sass";
 @import "~../node_modules/bulma/sass/form/_all.sass";
+@import "~../node_modules/bulma/sass/grid/_all.sass";
 
-
+html,
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+ footer {
+    margin-top: auto;
+}
 .app {
     padding-top: 1.25rem;
 }
-@media (max-width:1023px) {
-    .app {
-        padding-top: 9.25rem;
-        margin-bottom: 9.25rem;
-    }
+.content-column {
+    margin-top: 56px;
 }
-.footer {
-    position: fixed;
-    bottom: 0rem;
-    width: 100%;
-    padding-top: 1rem;
-}
+
 
 .login-form {
     max-width: 480px;
     display: block;
     margin: 0 auto;
+}
+.no-padding {
+    padding: 0px !important;
+}
+
+.backdrop-root {
+    cursor:pointer;
+display: flex;
+-moz-box-align: center;
+align-items: center;
+-moz-box-pack: center;
+justify-content: center;
+inset: 0px;
+background-color: rgba(0, 0, 0, 0.5);
+z-index: 5;
+position: fixed;
+
 }
