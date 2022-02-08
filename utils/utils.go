@@ -59,5 +59,4 @@ func SendResponse(w http.ResponseWriter, status int, body interface{}) {
 		return
 	}
 	fmt.Fprintf(w, string(j))
-
 }

@@ -29,7 +29,9 @@ const SideBarLink = (props) => {
   const {item,active} = props
   return (
     
-      <li data-key={item.key}><Link to={item.path} className={active == Number(item.key) ? 'is-active' : ''} onClick={()=>props.activateTab(item.key)}>{item.name}</Link></li>
+      <li data-key={item.key}>
+        <Link to={item.path} className={active == Number(item.key) ? 'is-active' : ''} onClick={()=>props.activateTab(item.key)}>{item.name}</Link>
+      </li>
     
   ) 
 }

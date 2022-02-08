@@ -93,17 +93,23 @@ type stop struct {
 }
 
 type Link struct {
-	Browser          string `json:browser`
-	Os               string `json:os`
-	Device_type      string `json:device_type`
-	Total_clicks     int    `json:total_clicks`
-	BrowserCount     int    `json:browser_count`
-	OsCount          int    `json:os_count`
-	DeviceType_Count int    `json:device_type_count`
+	Browser     []map[string]interface{} `json:"top_browser"`
+	Os          []map[string]interface{} `json:"top_os"`
+	Device_type []map[string]interface{} `json:"top_device"`
+	LongUrl     *string                  `json:"long_url"`
+	Qrcode      bool                     `json:"qr_code"`
+	Name        *string                  `json:"link_name"`
+	Description *string                  `json:"link_description"`
+	Tag         *string                  `json:"link_tag"`
+	Createdon   string                   `json:"created_on"`
 }
 
 type GetLinks struct {
-	Result []map[string]interface{} `json:result`
+	Result      []map[string]interface{} `json:"result"`
+	Topbrowser  string                   `json:"top_browser"`
+	Topos       string                   `json:"top_os"`
+	Topdevice   string                   `json:"top_device"`
+	TotalClicks int                      `json:"total_clicks"`
 }
 
 var count int = 0
@@ -470,17 +476,34 @@ func addExpiration(reqBody LinkAdd, shortId string) error {
 GetAll gets the summary logs of every shortened url that user has created
 **/
 func (link Links) GetAll(w http.ResponseWriter, r *http.Request, sesstion auth.Session) {
+	fmt.Println("fetching for", sesstion.Username)
+
 	query := `with t as (
-select urls.id,urls.username,urls.url,t2.device_type,t1.browser,t0.os,t4.total_clicks,sum(case when t4.total_clicks is not null then t4.total_clicks else 0 end) from urls
+select urls.id,urls.link_tag,urls.link_name,urls.username,urls.url,t2.device_type,t1.browser,t0.os,t4.total_clicks,urls.create_timestamp,sum(case when t4.total_clicks is not null then t4.total_clicks else 0 end) from urls
 left join (select id,count(*) as total_clicks from logs group by id order by total_clicks desc)t4 on t4.id = urls.id
 left join (select t.* from (select logs.id,logs.device_type, rank() over(partition by id order by count(device_type) desc) from logs group by logs.id,logs.device_type) t where rank=1)t2 on urls.id = t2.id
 left join (select t.* from (select logs.id,logs.browser, rank() over(partition by id order by count(browser) desc) from logs group by logs.id,logs.browser) t where rank=1) t1 on t2.id = t1.id
 left join  (select t.* from (select logs.id,logs.os, rank() over(partition by id order by count(os) desc) from logs group by logs.id,logs.os) t where rank=1)t0 on t1.id = t0.id group by urls.id,urls.username,urls.url,t2.device_type,t1.browser,t0.os,t4.total_clicks
 order by sum desc)
-select t.id,t.url,t.browser,t.os,t.device_type,coalesce(t.total_clicks,0) from t where t.username=$1 limit 10`
+select distinct t.id,t.link_tag,t.link_name,t.url,t.browser,t.os,t.device_type,coalesce(t.total_clicks,0) as total_clicks,t.create_timestamp as create_time from t where t.username=$1`
+
+	sort := r.URL.Query().Get("sort")
+	switch sort {
+	case "time_latest":
+		query = query + " ORDER BY create_time ASC"
+	case "time_oldest":
+		query = query + " ORDER BY create_time DESC"
+	case "clicks_desc":
+		query = query + " ORDER BY total_clicks DESC"
+	case "clicks_asc":
+		query = query + " ORDER BY total_clicks ASC"
+	default:
+		query = query + " ORDER BY total_clicks DESC"
+	}
 
 	rows, err := db.Query(context.Background(), query, sesstion.Username)
 	if err != nil {
+		fmt.Println(err)
 		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
 		return
 	}
@@ -495,10 +518,11 @@ select t.id,t.url,t.browser,t.os,t.device_type,coalesce(t.total_clicks,0) from t
 	defer rows.Close()
 	for rows.Next() {
 
-		var id, device_type, browser, os, url *string
+		var id, device_type, browser, os, url, name, tag *string
 		var total_clicks int
+		var create_time pgtype.Timestamptz
 		hash := make(map[string]interface{}, 0)
-		scanErr := rows.Scan(&id, &url, &browser, &os, &device_type, &total_clicks)
+		scanErr := rows.Scan(&id, &tag, &name, &url, &browser, &os, &device_type, &total_clicks, &create_time)
 		if scanErr != nil {
 			fmt.Println("Scan err", scanErr)
 		}
@@ -509,29 +533,68 @@ select t.id,t.url,t.browser,t.os,t.device_type,coalesce(t.total_clicks,0) from t
 		hash["os"] = os
 		hash["device_type"] = device_type
 		hash["total_clicks"] = total_clicks
+		hash["tag"] = tag
+		hash["name"] = name
+		hash["timestamp"] = create_time.Time.String()
 		list = append(list, hash)
 	}
 
-	links := GetLinks{Result: list}
+	var topBrowser pgtype.Varchar
+	var topOs pgtype.Varchar
+	var topDevice pgtype.Varchar
+	var totalClicks *int
+
+	metaErr := db.QueryRow(context.Background(), `with t as (SELECT urls.id,logs.browser,logs.os,logs.device_type from urls INNER JOIN logs ON urls.id=logs.id where username=$1)
+SELECT browser,os,device_type,total_clicks.total_count FROM (SELECT browser,count(browser) as c FROM t GROUP BY browser ORDER BY c DESC LIMIT 1) browser, (SELECT os,count(os) as c FROM t GROUP BY os ORDER BY c DESC LIMIT 1)os,(SELECT device_type,count(device_type) as c FROM t GROUP BY device_type ORDER BY c DESC LIMIT 1)device_type,(SELECT count(*) as total_count FROM t ORDER BY total_count DESC)total_clicks`, sesstion.Username).Scan(&topBrowser, &topOs, &topDevice, &totalClicks)
+	if metaErr != nil {
+		fmt.Println(metaErr)
+		utils.SendResponse(w, http.StatusInternalServerError, utils.SendErrorToClient("Try again later"))
+		return
+	}
+
+	links := GetLinks{Result: list, Topbrowser: topBrowser.String, Topos: topOs.String, Topdevice: topDevice.String, TotalClicks: *totalClicks}
 	utils.SendResponse(w, http.StatusOK, links)
 }
 
 // Get the summary detail of  short url for a given id
 func (link Links) Get(w http.ResponseWriter, r *http.Request, id, username string) {
-	var browser, os, device_type *string
-	var browserC, osC, device_typeC, total_clicks *int
-	query := `select urls.username,urls.id,urls.url, browser,browser_count,os,os_count,device_type,device_count,t0.total_clicks from urls
- left join 
- (select id,count(*) as total_clicks from logs group by id)t0 on urls.id = t0.id full outer join  (select id,browser,count(*) as browser_count from logs group by id,browser order by browser_count desc) t1 on t0.id=t1.id
-left join
-(select id,os,count(*) as os_count from logs group by id,os order by os_count desc) t2 on t1.id = t2.id
-left join
-(select id,device_type,count(*) as device_count from logs  group by id,device_type order by device_count desc)t3 on t2.id = t3.id where t0.id=$1 and urls.username=$2`
 
-	err := db.QueryRow(context.Background(), query, id, username).Scan(&browser, &browserC, &os, &osC, &device_type, &device_typeC, &total_clicks)
+	query := `with t as (select browser,b_c,os,o_c,device_type,o_d,t3.rank,t1.id from (select distinct browser,id,count(browser) as b_c, row_number() over(order by count(browser)  desc) rank from logs where id='sg' group by browser,id)t1
+FULL OUTER JOIN
+(select  os,id,count(os) as o_c, row_number() over(order by count(os) desc) rank from logs where id='sg' group by os,id)t2 on t1.rank=t2.rank FULL OUTER JOIN
+(select  device_type,id,count(device_type) as o_d, row_number() over(order by count(device_type) desc) rank from logs where id='sg' group by device_type,id)t3 on t2.rank=t3.rank)
+SELECT urls.url,qr_code,create_timestamp,link_name,link_tag,link_description,browser,b_c,os,o_c,device_type,o_d FROM URLS left join t on urls.id=t.id where urls.id=$1 and urls.username=$2`
+
+	rows, err := db.Query(context.Background(), query, id, username)
+
 	switch err {
 	case nil:
-		utils.SendResponse(w, http.StatusOK, Link{Browser: *browser, BrowserCount: *browserC, Os: *os, OsCount: *osC, Device_type: *device_type, DeviceType_Count: *device_typeC, Total_clicks: *total_clicks})
+		linkDetail := Link{}
+		for rows.Next() {
+			var browser, os, device_type pgtype.Varchar
+			var browserCount, osCount, deviceCount *int
+			var created_on pgtype.Timestamptz
+			scanErr := rows.Scan(&linkDetail.LongUrl, &linkDetail.Qrcode, &created_on, &linkDetail.Name, &linkDetail.Tag, &linkDetail.Description, &browser, &browserCount, &os, &osCount, &device_type, &deviceCount)
+			if scanErr != nil {
+				fmt.Println(scanErr)
+				return
+			}
+			linkDetail.Createdon = created_on.Time.String()
+			linkDetail.Browser = append(linkDetail.Browser, map[string]interface{}{
+				"name":  browser,
+				"value": browserCount,
+			})
+			linkDetail.Os = append(linkDetail.Os, map[string]interface{}{
+				"name":  os,
+				"value": osCount,
+			})
+			linkDetail.Device_type = append(linkDetail.Device_type, map[string]interface{}{
+				"name":  device_type,
+				"value": deviceCount,
+			})
+
+		}
+		utils.SendResponse(w, http.StatusOK, &linkDetail)
 	case pgx.ErrNoRows:
 		utils.SendResponse(w, http.StatusNotFound, utils.SendErrorToClient("Not found"))
 	default:
@@ -683,8 +746,8 @@ func updateLogs(r *http.Request, result storedUrl) {
 	} else {
 		ip = parsedIP.String()
 	}
-
-	_, err = db.Exec(context.Background(), "insert into logs(id,campaign,source,medium,os,browser,device_type,created_on,ip)values($1,$2,$3,$4,$5,$6,$7,$8,$9)", result.id, campaign, source, medium, browser_info.OS.Platform.String(), browser_info.Browser.Name.String(), browser_info.DeviceType.String(), time.Now(), ip)
+	fmt.Println(browser_info.DeviceType.StringTrimPrefix())
+	_, err = db.Exec(context.Background(), "insert into logs(id,campaign,source,medium,os,browser,device_type,created_on,ip)values($1,$2,$3,$4,$5,$6,$7,$8,$9)", result.id, campaign, source, medium, browser_info.OS.Platform.StringTrimPrefix(), browser_info.Browser.Name.StringTrimPrefix(), browser_info.DeviceType.StringTrimPrefix(), time.Now(), ip)
 	if err != nil {
 		var pgError *pgconn.PgError
 		errors.As(err, &pgError)

@@ -3,8 +3,6 @@ import {BrowserRouter as Router,
   Switch,
   Route,
   Redirect,
-  useHistory,
-  Link
 } from 'react-router-dom';
 import Navbar from './navbar';
 import Sidebar from './sidebar';
@@ -12,7 +10,8 @@ import {Login,Signup} from './Auth/'
 import Home from './Home';
 import './App.scss'
 import LinkCreate from './linkcreate';
-
+import Campaign from './Campaign';
+import {Links}  from './links';
 
 const authContext = createContext(null)
 
@@ -63,8 +62,10 @@ const useProvideAuth = () =>{
 const App = () => {
     console.log('app')
     const [openMenu,setOpenMenu] = useState(false)
+
+
     useEffect(()=>{
-	console.log("menu changed",openMenu)
+      	console.log("menu changed",openMenu)
 
     },[openMenu])
   return (
@@ -76,20 +77,26 @@ const App = () => {
 	  <div className="app">
 	  {openMenu &&  <div className="backdrop-root" onClick={()=>setOpenMenu(false)}> </div> }
        <div className="content-column container">
-        <Switch>
-          <PublicRoute path="/login">
-            <Login></Login>
-          </PublicRoute>
-          <PublicRoute path="/signup">
-            <Signup></Signup>
-          </PublicRoute>
-          <PublicRoute path="/create-link">
-            <LinkCreate></LinkCreate>
-          </PublicRoute>
-          <PrivateRoute path="/">
-           <Home></Home>
-          </PrivateRoute>
-        </Switch>
+          <Switch>
+            <PublicRoute path="/login">
+              <Login></Login>
+            </PublicRoute>
+            <PublicRoute path="/signup">
+              <Signup></Signup>
+            </PublicRoute>
+            <PublicRoute path="/create-link">
+              <LinkCreate></LinkCreate>
+            </PublicRoute>
+            <PrivateRoute path="/links">
+              <Links></Links>
+            </PrivateRoute>
+            <PrivateRoute path="/campaigns">
+              <Campaign></Campaign>
+            </PrivateRoute>
+            <PrivateRoute path="/">
+              <Home></Home>
+            </PrivateRoute>
+          </Switch>
         </div>
       </div>
     </Router>
@@ -100,6 +107,7 @@ const App = () => {
 
 const PrivateRoute = ({children,...rest}) => {
  const {user,isLoading} = useAuth()
+ console.log(user,isLoading,children)
  return (
 
    <Route {...rest}>
@@ -119,17 +127,8 @@ const PublicRoute = ({children,...rest}) => {
   )
 }
 
-const CampaginLink = () => {
-  return (
-    <Link to="/campaign">
-      <button className="button is-primary">
-      Create campaign
-      </button>
-    </Link>
-  )
-}
 
 
 // export default App;
-export {App,CampaginLink,useAuth}
+export {App,useAuth}
 
