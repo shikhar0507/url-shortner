@@ -1,7 +1,6 @@
 import React from 'react';
 import {
-    Link,
-    withRouter,
+    Link, useNavigate,
 } from "react-router-dom";
 import { useAuth } from '../App';
 import "./index.scss";
@@ -10,7 +9,7 @@ import "./index.scss";
      console.log("navbar",props)
      
      const {user,setUser} = useAuth()
-     
+     const navigate = useNavigate()
      const logout = () => {
       console.log("logout")
   
@@ -25,6 +24,7 @@ import "./index.scss";
         if(res.ok) return res.json()
       }).then(()=>{
         setUser(false)
+        navigate('/login')
       }).catch(err=>{
         console.error(err)
       })
@@ -92,4 +92,4 @@ import "./index.scss";
 }
 
 
-export default withRouter(Navbar);
+export default Navbar;

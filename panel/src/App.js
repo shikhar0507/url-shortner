@@ -1,8 +1,9 @@
 import React, { useState,useEffect,useContext,createContext } from 'react';
 import {BrowserRouter as Router,
-  Switch,
+  Navigate,
   Route,
-  Redirect,
+  Routes,
+  useLocation
 } from 'react-router-dom';
 import Navbar from './navbar';
 import Sidebar from './sidebar';
@@ -11,7 +12,7 @@ import Home from './Home';
 import './App.scss'
 import LinkCreate from './linkcreate';
 import Campaign from './Campaign';
-import {Links}  from './links';
+import {LinkDetail, Links, LinkTable}  from './links';
 
 const authContext = createContext(null)
 
@@ -21,6 +22,7 @@ const useAuth = () => {
 
 const ProvideAuth = ({children}) => {
   const auth = useProvideAuth();
+  console.log("provide auth",auth)
   return (
     <authContext.Provider value={auth}>
       {auth.isLoading ? (<div>Loading...</div>) : (children)}
@@ -47,6 +49,7 @@ const useProvideAuth = () =>{
   useEffect(()=>{
     console.log('sending auth request...')
     fetchAuth().then(authState=>{
+        console.log("setting user status",authState.Authenticated)
         setUser(authState.Authenticated)
         setIsLoading(false)
     }).catch(console.error)
@@ -63,7 +66,7 @@ const App = () => {
     console.log('app')
     const [openMenu,setOpenMenu] = useState(false)
 
-
+  
     useEffect(()=>{
       	console.log("menu changed",openMenu)
 
@@ -72,31 +75,31 @@ const App = () => {
   <ProvideAuth>
   
     <Router>
-	  <Navbar setOpen={setOpenMenu} isOpen={openMenu}></Navbar>
-	  <Sidebar isOpen={openMenu} setOpen={setOpenMenu}></Sidebar>
-	  <div className="app">
-	  {openMenu &&  <div className="backdrop-root" onClick={()=>setOpenMenu(false)}> </div> }
+      <Navbar setOpen={setOpenMenu} isOpen={openMenu}></Navbar>
+      <Sidebar isOpen={openMenu} setOpen={setOpenMenu}></Sidebar>
+      <div className="app">
+	    {openMenu &&  <div className="backdrop-root" onClick={()=>setOpenMenu(false)}> </div> }
        <div className="content-column container">
-          <Switch>
-            <PublicRoute path="/login">
-              <Login></Login>
-            </PublicRoute>
-            <PublicRoute path="/signup">
-              <Signup></Signup>
-            </PublicRoute>
-            <PublicRoute path="/create-link">
-              <LinkCreate></LinkCreate>
-            </PublicRoute>
-            <PrivateRoute path="/links">
-              <Links></Links>
-            </PrivateRoute>
-            <PrivateRoute path="/campaigns">
-              <Campaign></Campaign>
-            </PrivateRoute>
-            <PrivateRoute path="/">
-              <Home></Home>
-            </PrivateRoute>
-          </Switch>
+          <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/create-link" element={<LinkCreate />} />
+
+              <Route path="links" element={<RequireAuth> <Links /></RequireAuth>}>
+                <Route index element={<LinkTable />} />
+                <Route path=":linkId" element={<LinkDetail />} />
+              </Route>
+              <Route path="/campaigns" element={<RequireAuth> <Campaign /></RequireAuth>} />
+              <Route path="/" element={<RequireAuth> <Home /></RequireAuth>} />
+              <Route
+      path="*"
+      element={
+        <main style={{ padding: "1rem" }}>
+          <p>There's nothing here!</p>
+        </main>
+      }
+    />
+          </Routes>
         </div>
       </div>
     </Router>
@@ -104,27 +107,11 @@ const App = () => {
   )
 }
 
-
-const PrivateRoute = ({children,...rest}) => {
- const {user,isLoading} = useAuth()
- console.log(user,isLoading,children)
- return (
-
-   <Route {...rest}>
-    {isLoading ? (<div>Loading...</div>) : user ? (children) : (<Redirect to="/login"></Redirect>)}
-   </Route>
- )
-}
-
-const PublicRoute = ({children,...rest}) => {
-  const {user,isLoading} = useAuth()
-  const {path} = {...rest}
-  return (
-    <Route {...rest}>
-
-      {isLoading ? (<div>Loading...</div>) : path === "/create-link" ? (children) : user ? (<Redirect to="/"></Redirect>) : (children)}
-    </Route>
-  )
+const RequireAuth = ({children}) => {
+  const {user,isLoading} = useAuth();
+  const location = useLocation();
+  console.log("navigate",user,isLoading)
+  return isLoading ? (<div>Loading...</div>) :  user  ? children : <Navigate to="/login" replace state={{path:location.pathname}}></Navigate>
 }
 
 

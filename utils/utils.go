@@ -49,6 +49,7 @@ func SendResponse(w http.ResponseWriter, status int, body interface{}) {
 	j, err := json.Marshal(body)
 	fmt.Println(string(j))
 	if err != nil {
+		fmt.Println(err)
 		errResp := Response{Message: "Error", Status: http.StatusInternalServerError}
 		finalMsg, err := json.Marshal(errResp)
 		if err != nil {

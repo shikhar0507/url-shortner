@@ -38,7 +38,6 @@ const URLShortner = () => {
     country_redirect:[],
     mobile_url:'',
     desktop_url:'',
-    others_url:''
   });
   const [shortenUrl,setShortenUrl] = useState(false)
 
@@ -354,7 +353,7 @@ const DeviceRedirect = ({ linkAttrs, setLinkAttrs }) => {
       <div className="tab-area">
          <div> 
           <div className="field">
-          <label className="label">Mobile</label>
+          <label className="label">Mobile/Tablet</label>
           <div className="control">
             <input className="input" type="text" placeholder="Mobile url" value={linkAttrs.mobile_url} onChange={(e)=> setLinkAttrs({
       ...linkAttrs,
@@ -371,16 +370,7 @@ const DeviceRedirect = ({ linkAttrs, setLinkAttrs }) => {
     })}/>
           </div>
         </div>
-        <div className="field">
-          <label className="label">Others</label>
-          <div className="control">
-            <input className="input" type="text" placeholder="Others like tablet etc." value={linkAttrs.others_url} onChange={(e)=> setLinkAttrs({
-      ...linkAttrs,
-      others_url:e.target.value
-    })} />
-          </div>
-          <p className="help">Rest of the requests will be redirect to this url</p>
-        </div>
+        
         </div> 
         
       </div>
@@ -598,7 +588,6 @@ const GeneralView = ({linkAttrs, setLinkAttrs,setShortenUrl })=>{
         }],
         mobile_url:linkAttrs.mobile_url,
         desktop_url:linkAttrs.desktop_url,
-        others_url:linkAttrs.others_url
       })
     }).then(res => {
       return res.json();

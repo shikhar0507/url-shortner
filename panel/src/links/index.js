@@ -1,23 +1,18 @@
 import axios from "axios"
-import { Fragment, useEffect, useState } from "react"
+import {useEffect, useState } from "react"
 import './index.scss';
-import {Link,useParams,Switch,Route} from 'react-router-dom';
-import { useRouteMatch,useLocation } from "react-router";
+import {Link,useParams,Outlet, useNavigate, useLocation} from 'react-router-dom';
+
+
 const Links = () => {
 
-    const {path} = useRouteMatch();
 
     return (
-        
-        <Switch>
-            <Route path={`${path}/:linkId`}>
-                <LinkDetail></LinkDetail>
-            </Route>
-            <Route exact path={path}>
-                <LinkTable></LinkTable>
-            </Route>
-           
-        </Switch>
+        <div>
+            {/* <LinkTable /> */}
+            <Outlet />
+        </div>
+
     )
 
 }
@@ -44,7 +39,7 @@ const LinkTable = () => {
     }
     useEffect(() => {
 
-        getLinks('click_desc')
+        getLinks('time_latest')
 
     }, []);
     return (
@@ -105,9 +100,7 @@ const LinkTable = () => {
                     {links.map(link => {
                         return <tr key={link.id}>
                             <td>
-                                <Link to={{pathname:"/links/" + link.id,state:{
-                                    totalClicks :link.total_clicks
-                                }}}  >
+                                <Link to={"/links/" + link.id} state={link.total_clicks}>
                                     {link.id}
                                 </Link>
                             </td>
@@ -128,24 +121,37 @@ const LinkTable = () => {
 
 }
 
-const LinkDetail = ({totalClicks})=> {
+const LinkDetail = ()=> {
     const {linkId} = useParams();
-    const location = useLocation()
-    console.log(location.state)
-    const [topBrowser,setTopBrowser] = useState("-")
-    const [topDevice,setTopDevice] = useState("-")
-    const [topOs,setTopOs] = useState("-")
-    // const [totalClicks,setTotalClicks] = useState("")
-    const [linkDetails,setLinkDetail] = useState({})
+    const [linkDetails,setLinkDetail] = useState({
+        top_browser:[],
+        top_os:[],
+        top_device:[],
+        top_referrer:[],
+        top_countries:[]
+    })
+    const navigate = useNavigate() 
+    const [deleteLoad,setDeleteLoad] = useState(false)
+    const {state} = useLocation()
 
+    const deleteUrl = () => {
+        setDeleteLoad(true)
+        axios.delete(`http://localhost:8080/links/${linkId}`,{
+            withCredentials:true
+        }).then(resp=>{
+            console.log(resp.data)
+            navigate("/links")
+        }).catch(err=>{
+            setDeleteLoad(false)
+        })
+    };
+    
     useEffect(()=>{
         axios.get(`http://localhost:8080/links/${linkId}/`,{
             withCredentials:true
         }).then(resp=>{
             const result = resp.data;
-            setTopBrowser(result.top_browser[0].name)
-            setTopOs(result.top_os[0].name)
-            setTopDevice(result.top_device[0].name)
+     
             setLinkDetail({
                 ...linkDetails,
                ...result
@@ -155,41 +161,43 @@ const LinkDetail = ({totalClicks})=> {
     },[])
     return(
         <section>
-            <div className="columns">
-                        <div className="column">
-                            <StatCard title="Top Browser" value={topBrowser}/>
-                        </div>
-                        <div className="column">
-                        <StatCard title="Top Device" value={topDevice}/>
-
-                        </div>
-                        <div className="column">
-                            <StatCard title="Top Os" value={topOs}/>
-                        </div>
-                        <div className="column">
-                            <StatCard title="Total Clicks" value={location.state.totalClicks}/>
-                        </div>
+            <div className="is-pulled-left">{linkDetails.link_name}</div>
+                <div className="is-pulled-right has-text-centered">
+                    <div>Total Clicks</div>
+                    <span className="is-size-3 has-text-success has-text-weight-bold">{state || 0}</span>
+                </div>
+            <div className="pt-5">
+                <a className="is-size-4 has-text-weight-bold" href={"http://localhost:8080/"+linkId} target="_blank">Link : http://localhost:8080/{linkId}</a>
             </div>
-            <div className="">{linkDetails.link_name}</div>
-            <div className="is-size-4 has-text-weight-bold">Link : http://localhost:8080/{linkId}</div>
-            <span className="tag is-primary">{linkDetails.link_tag}</span>
-            <p>{linkDetails.link_description}</p>
-            <div className="is-size-5 mt-2">
+            <div>
+                <span className="tag is-primary">{linkDetails.link_tag}</span>
+                <span className="tag is-info ml-2">Created on : {linkDetails.created_on}</span>
+            </div>
+            <p className="mt-3">{linkDetails.link_description}</p>
+            <p className="is-size-5 mt-2">
                 <a href={linkDetails.long_url}>{linkDetails.long_url}</a>
-            </div>
-            <div className="buttons are-small">
+            </p>
+            <div className="buttons are-small mt-2">
                 <button className="button is-info is-outlined">
                      <span className="icon">
                         <i className="fas fa-edit"></i>
                     </span>
                     <span>Edit</span>
                 </button>
-                <button className="button is-danger is-outlined">
+                <button className={"button is-danger is-outlined "+(deleteLoad ? 'is-loading' : '')} onClick={deleteUrl}>
                     <span className="icon">
                         <i className="fas fa-trash"></i>
                     </span>
                     <span>Delete</span>
                 </button>
+            </div>
+            <div className="columns mt-4 is-multiline">
+                <RankCard title='Top Browser' data={linkDetails.top_browser}/>
+                <RankCard title='Top OS' data={linkDetails.top_os}/>
+                <RankCard title='Top Device' data={linkDetails.top_device}/>
+                <RankCard title='Top Referrer' data={linkDetails.top_referrer}/>
+                <RankCard title='Top Country' data={linkDetails.top_countries}/>
+
             </div>
         </section>
     )
@@ -210,4 +218,36 @@ const StatCard  = ({title,value}) => {
     )
 }
 
-export  {Links,LinkDetail};
+const RankCard = ({title,data}) => {
+    let total = 0
+    data.forEach(item=>{
+        total += item.value
+    })
+    return (
+        <div className="column is-4">
+            <div className="card">
+            <header className="card-header">
+                <p className="card-header-title">
+                {title}
+                </p>
+                <p className="is-pulled-right pt-4 pb-3 pl-4 pr-4 has-text-weight-semibold">
+                Clicks
+                </p>
+            </header>
+            <div className="card-content">
+
+                    <ul>
+                        {data.map((item,idx)=>{
+                            return <li key={{title}+item.name+idx} className="mt-1">
+                                <span className="has-text-black">{item.name}</span>
+                                <span className="is-pulled-right has-text-black"><span className="has-text-dark mr-2">{Number(100*(Number(item.value)/total)).toFixed(2)}%</span> {item.value}</span>
+                            </li>
+                        })}
+                    </ul>
+            </div>
+        </div>
+        </div>
+    )
+}
+
+export  {Links,LinkDetail,LinkTable};

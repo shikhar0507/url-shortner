@@ -31,7 +31,7 @@ CREATE OR REPLACE FUNCTION insertlongurl(username character varying, password ch
 					   has_device_redirect = false;
 					END if;
 
-					INSERT INTO urls(id,url,username,link_tag,password,not_found_url,android_deep_link,ios_deep_link,link_name,link_description,http_status,play_store_link,qr_code,country_block,country_redirect,device_type_redirect,mobile_url,desktop_url,others_url,create_timestamp) VALUES(S,data->>'longUrl',username,data->>'tag',password,data->>'not_found_url',data->>'android_deep_link',data->>'ios_deep_link',data->>'name',data->>'description',CAST(data->>'http_status' AS INTEGER), data->>'play_store_link',CAST(data->>'qr_code' AS BOOLEAN),has_country_block,false, has_device_redirect,data->>'mobile_url',data->>'desktop_url',data->>'others_url',CURRENT_TIMESTAMP);
+					INSERT INTO urls(id,url,username,link_tag,password,not_found_url,android_deep_link,ios_deep_link,link_name,link_description,http_status,play_store_link,qr_code,country_block,device_type_redirect,mobile_url,desktop_url,expiration) VALUES(S,data->>'longUrl',username,data->>'tag',password,data->>'not_found_url',data->>'android_deep_link',data->>'ios_deep_link',data->>'name',data->>'description',CAST(data->>'http_status' AS INTEGER), data->>'play_store_link',CAST(data->>'qr_code' AS BOOLEAN),has_country_block,false, has_device_redirect,data->>'mobile_url',data->>'desktop_url',data->>'others_url',data->>'expiration');
 
 					INSERT INTO campaign VALUES(S,data->'campaign'->>'name',data->'campaign'->>'medium',data->'campaign'->>'source',data->'campaign'->>'term',data->'campaign'->>'content',data->'campaign'->>'id');
 					

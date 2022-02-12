@@ -1,15 +1,16 @@
 import React from 'react';
 import { useState } from 'react';
-import {useHistory} from 'react-router-dom';
+import {useNavigate} from 'react-router-dom';
 import { useAuth } from '../App';
 
 const Login = (props) => {
-  const {setUser} = useAuth()
+  const {setUser,user} = useAuth()
+  console.log("login",user)
   const [username,setUsername] = useState('')
   const [password,setPassword] = useState('')
   const [error,setError] = useState('')
   const [active,setActive] = useState(false)
-
+  const navigate = useNavigate();
   const handleSubmit = (e) => {
     if(!username) {
       return setError('Please enter a username')
@@ -39,6 +40,7 @@ const Login = (props) => {
         return
       }    
       setUser(true)
+      navigate("/")
     }).catch(error=>{
       setError(error.message)
       setActive(false)
@@ -68,12 +70,12 @@ const Login = (props) => {
   )
 }
 const Signup = () => {
-  const history = useHistory()
+  // const nav = useNavigate()
   const [username,setUsername] = useState('')
   const [password,setPassword] = useState('')
   const [error,setError] = useState('')
   const [active,setActive] = useState(false)
-
+  const navigate = useNavigate()
   const handleSubmit = (e) => {
     if(!username) {
       return setError('Please enter a username')
@@ -102,8 +104,8 @@ const Signup = () => {
         setActive(false)
         return
       }    
-
-      history.push('/login')
+      navigate("/login")
+      // history.push('/login')
         
     }).catch(error=>{
       setError(error.message)

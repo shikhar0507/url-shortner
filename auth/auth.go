@@ -206,6 +206,7 @@ func GetSession(r *http.Request, db *pgxpool.Pool) (Session, error) {
 	var sessionId pgtypeuuid.UUID
 	var username string
 	session := Session{SessionId: "", Username: ""}
+	fmt.Println("session cookie", sessionCookie)
 	if sessionCookie == "" {
 		return session, pgx.ErrNoRows
 	}
